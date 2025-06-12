@@ -43,61 +43,57 @@ def load_data(path):
 
 ###### 選擇金融商品
 st.subheader("選擇金融商品: ")
-# choices = ['台積電: 2022.1.1 至 2024.4.9', '大台指2024.12到期: 2024.1 至 2024.4.9']
-choices = ['台積電: 2022.1.1 至 2024.4.9', '大台指期貨2024.12到期: 2023.12 至 2024.4.11', '小台指期貨2024.12到期: 2023.12 至 2024.4.11', '英業達2020.1.2 至 2024.4.12', '堤維西2020.1.2 至 2024.4.12']
+choices = [
+    '台積電 2330: 2020.01.02 至 2025.04.16',
+    '大台指期貨2024.12到期: 2023.12 至 2024.4.11',
+    '小台指期貨2024.12到期: 2023.12 至 2024.4.11',
+    '英業達 2356: 2020.01.02 至 2024.04.12',
+    '堤維西 1522: 2020.01.02 至 2024.04.12',
+    '0050 台灣50ETF: 2020.01.02 至 2025.03.10',
+    '00631L 台灣50正2: 2023.04.17 至 2025.04.17',
+    '華碩 2357: 2023.04.17 至 2025.04.16',
+    '金融期貨 CBF: 2023.04.17 至 2025.04.17',
+    '電子期貨 CCF: 2023.04.17 至 2025.04.16',
+    '小型電子期貨 CDF: 2020.03.02 至 2025.04.14',
+    '非金電期貨 CEF: 2023.04.17 至 2025.04.16',
+    '摩台期貨 CMF: 2023.04.17 至 2025.04.17',
+    '小型金融期貨 CQF: 2023.04.17 至 2025.04.17',
+    '美元指數期貨 FXF: 2020.03.02 至 2025.04.14'
+]
 choice = st.selectbox('選擇金融商品', choices, index=0)
-##### 读取Pickle文件
-if choice == choices[0] :         ##'台積電: 2022.1.1 至 2024.4.9':
-    df_original = load_data('kbars_2330_2022-01-01-2024-04-09.pkl')
-    product_name = '台積電2330'
-    # df_original = load_data('kbars_2330_2022-01-01-2024-04-09.pkl')
-    # df_original = load_data('kbars_2330_2022-01-01-2022-11-18.pkl')  
-    # df_original = pd.read_pickle('kbars_2330_2022-01-01-2022-11-18.pkl')
-    #df.columns  ## Index(['Unnamed: 0', 'time', 'open', 'low', 'high', 'close', 'volume','amount'], dtype='object')
-    # df_original = df_original.drop('Unnamed: 0',axis=1)
-# if choice == '大台指2024.12到期: 2024.1 至 2024.4.9':
-#     df_original = load_data('kbars_TXF202412_2024-01-01-2024-04-09.pkl')  
-if choice == choices[1] :                   ##'大台指期貨2024.12到期: 2023.12 至 2024.4.11':
-    df_original = load_data('kbars_TXF202412_2023-12-21-2024-04-11.pkl')
-    product_name = '大台指期貨'
-if choice == choices[2] :                              ##'小台指期貨2024.12到期: 2023.12 至 2024.4.11':
-    df_original = load_data('kbars_MXF202412_2023-12-21-2024-04-11.pkl')
-    product_name = '小台指期貨'
-if choice == choices[3] :                                           ##'英業達2020.1.2 至 2024.4.12':
-    df_original = load_data('kbars_2356_2020-01-01-2024-04-12.pkl')
-    product_name = '英業達2356'
-if choice == choices[4] :                                                       ##'堤維西2020.1.2 至 2024.4.12':
-    df_original = load_data('kbars_1522_2020-01-01-2024-04-12.pkl')
-    product_name = '堤維西1522'
 
+# 對應每個選項的 pkl 檔與日期範圍
+product_info = {
+    choices[0]: ('exported/kbars_1min_2330_2020-01-02_To_2025-04-16.pkl', '台積電 2330', '2020-01-02', '2025-04-16'),
+    choices[1]: ('kbars_TXF202412_2023-12-21-2024-04-11.pkl', '大台指期貨', '2023-12-21', '2024-04-11'),
+    choices[2]: ('kbars_MXF202412_2023-12-21-2024-04-11.pkl', '小台指期貨', '2023-12-21', '2024-04-11'),
+    choices[3]: ('kbars_2356_2020-01-01-2024-04-12.pkl', '英業達 2356', '2020-01-02', '2024-04-12'),
+    choices[4]: ('kbars_1522_2020-01-01-2024-04-12.pkl', '堤維西 1522', '2020-01-02', '2024-04-12'),
+    choices[5]: ('exported/kbars_1min_0050_2020-01-02_To_2025-03-10.pkl', '台灣50ETF 0050', '2020-01-02', '2025-03-10'),
+    choices[6]: ('exported/kbars_1min_00631L_2023-04-17_To_2025-04-17.pkl', '台灣50正2 00631L', '2023-04-17', '2025-04-17'),
+    choices[7]: ('exported/kbars_1min_2357_2023-04-17_To_2025-04-16.pkl', '華碩 2357', '2023-04-17', '2025-04-16'),
+    choices[8]: ('exported/kbars_1min_CBF_2023-04-17_To_2025-04-17.pkl', '金融期貨 CBF', '2023-04-17', '2025-04-17'),
+    choices[9]: ('exported/kbars_1min_CCF_2023-04-17_To_2025-04-16.pkl', '電子期貨 CCF', '2023-04-17', '2025-04-16'),
+    choices[10]: ('exported/kbars_1min_CDF_2020-03-02_To_2025-04-14.pkl', '小型電子期貨 CDF', '2020-03-02', '2025-04-14'),
+    choices[11]: ('exported/kbars_1min_CEF_2023-04-17_To_2025-04-16.pkl', '非金電期貨 CEF', '2023-04-17', '2025-04-16'),
+    choices[12]: ('exported/kbars_1min_CMF_2023-04-17_To_2025-04-17.pkl', '摩台期貨 CMF', '2023-04-17', '2025-04-17'),
+    choices[13]: ('exported/kbars_1min_CQF_2023-04-17_To_2025-04-17.pkl', '小型金融期貨 CQF', '2023-04-17', '2025-04-17'),
+    choices[14]: ('exported/kbars_1min_FXF_2020-03-02_To_2025-04-14.pkl', '美元指數期貨 FXF', '2020-03-02', '2025-04-14'),
+}
 
-
+# 載入資料
+pkl_path, product_name, default_start, default_end = product_info[choice]
+df_original = load_data(pkl_path)
 
 ###### 選擇資料區間
 st.subheader("選擇資料時間區間")
-if choice == choices[0] :                       ##'台積電: 2022.1.1 至 2024.4.9':
-    start_date = st.text_input('輸入開始日期(日期格式: 2022-01-01), 區間:2022-01-01 至 2024-04-09', '2022-01-01')
-    end_date = st.text_input('輸入結束日期 (日期格式: 2024-04-09), 區間:2022-01-01 至 2024-04-09', '2024-04-09')
-if choice == choices[1] :                                   ##'大台指期貨2024.12到期: 2023.12 至 2024.4.11':
-    start_date = st.text_input('輸入開始日期(日期格式: 2023-12-21), 區間:2023-12-21 至 2024-04-11', '2023-12-21')
-    end_date = st.text_input('輸入結束日期 (日期格式: 2024-04-11), 區間:2023-12-21 至 2024-04-11', '2024-04-11')
-if choice == choices[2] :                                               ##'小台指期貨2024.12到期: 2023.12 至 2024.4.11':
-    start_date = st.text_input('輸入開始日期(日期格式: 2023-12-21), 區間:2023-12-21 至 2024-04-11', '2023-12-21')
-    end_date = st.text_input('輸入結束日期 (日期格式: 2024-04-11), 區間:2023-12-21 至 2024-04-11', '2024-04-11')
-if choice == choices[3] :                                                ##'英業達2020.1.2 至 2024.4.12':
-    start_date = st.text_input('輸入開始日期(日期格式: 2020-01-02), 區間:2020-01-02 至 2024-04-12', '2020-01-02')
-    end_date = st.text_input('輸入結束日期 (日期格式: 2024-04-12), 區間:2020-01-02 至 2024-04-12', '2024-04-12')
-if choice == choices[4] :                                                             ##'堤維西2020.1.2 至 2024.4.12':
-    start_date = st.text_input('輸入開始日期(日期格式: 2020-01-02), 區間:2020-01-02 至 2024-04-12', '2020-01-02')
-    end_date = st.text_input('輸入結束日期 (日期格式: 2024-04-12), 區間:2020-01-02 至 2024-04-12', '2024-04-12')
+start_date_str = st.text_input(f'輸入開始日期 (格式: YYYY-MM-DD)，區間: {default_start} 至 {default_end}', default_start)
+end_date_str = st.text_input(f'輸入結束日期 (格式: YYYY-MM-DD)，區間: {default_start} 至 {default_end}', default_end)
 
-
-## 轉變為datetime object.
-start_date = datetime.datetime.strptime(start_date,'%Y-%m-%d')
-end_date = datetime.datetime.strptime(end_date,'%Y-%m-%d')
-## 使用条件筛选选择时间区间的数据
+# 轉為 datetime 並篩選資料
+start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d')
+end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d')
 df = df_original[(df_original['time'] >= start_date) & (df_original['time'] <= end_date)]
-
 
 #%%
 ####### (2) 轉化為字典 #######
@@ -133,7 +129,6 @@ def To_Dictionary_1(df, product_name):
     return KBar_dic
 
 KBar_dic = To_Dictionary_1(df, product_name)
-
 
 #%%
 #######  (3) 改變 KBar 時間長度 & 形成 KBar 字典 (新週期的) & Dataframe #######
