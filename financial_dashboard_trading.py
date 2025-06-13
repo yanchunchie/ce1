@@ -130,6 +130,7 @@ def To_Dictionary_1(df, product_name):
 
 KBar_dic = To_Dictionary_1(df, product_name)
 
+
 #%%
 #######  (3) 改變 KBar 時間長度 & 形成 KBar 字典 (新週期的) & Dataframe #######
 ###### 定義函數: 進行 K 棒更新  &  形成 KBar 字典 (新週期的): 設定cycle_duration可以改成你想要的 KBar 週期
@@ -196,6 +197,7 @@ KBar_dic = Change_Cycle(Date,cycle_duration,KBar_dic,product_name)   ## 設定cy
 
 ###### 將K線 Dictionary 轉換成 Dataframe
 KBar_df = pd.DataFrame(KBar_dic)
+
 
 #%%
 ####### (4) 計算各種技術指標 #######
@@ -518,7 +520,12 @@ import pandas as pd
 if 'PSAR' not in KBar_df.columns:
     KBar_df['PSAR'] = Calculate_PSAR(KBar_df)
 
-
+#%% 回測函式
+def back_test_ma_strategy(record_obj, KBar_df,
+                          MoveStopLoss, LongMAPeriod, ShortMAPeriod, Order_Quantity):
+    # …（照之前給的函式貼這段）…
+    return record_obj
+#%%
 ###### K線圖, 移動平均線MA
 with st.expander("K線圖, 移動平均線"):
     fig1 = make_subplots(specs=[[{"secondary_y": True}]])
@@ -1037,13 +1044,17 @@ def back_test_ma_strategy(record_obj, KBar_df,
 # OrderRecord.GetProfit()               ## 利潤清單
 
 
-
-
 #%%  
 ##### （五）多商品回測績效表格化呈現  
 import pandas as pd  
 import numpy as np  
 import datetime  
+#── 放在 products_info 迴圈之前 ──
+with st.expander("MA 交叉策略參數設定"):
+    MoveStopLoss   = st.slider('停損量',        0, 100, 30)
+    LongMAPeriod   = st.slider('長 MA 週期',    1, 100, 10)
+    ShortMAPeriod  = st.slider('短 MA 週期',    1, 100,  2)
+    Order_Quantity = st.slider('下單數量',      1, 100,  1)
 
 # 1. 完整商品對應 pkl 路徑與預設日期  
 products_info = {
@@ -1142,8 +1153,6 @@ for label, (pkl_path, product_name, ds, de) in products_info.items():
 # 全部跑完後一次顯示
 df_summary = pd.DataFrame(summary_rows)
 st.table(df_summary)
-
-
 
 
 
