@@ -1182,72 +1182,106 @@ if choice == choices[4] :   #'堤維西2020.1.2 至 2024.4.12':
 ##### （五）多商品回測績效表格化呈現  
 import pandas as pd  
 import numpy as np  
+import datetime  
 
-# 1. 完整商品清單（無省略號）  
-products = [  
-    '台積電 2330: 2020.01.02 至 2025.04.16',  
-    '大台指期貨2024.12到期: 2023.12 至 2024.4.11',  
-    '小台指期貨2024.12到期: 2023.12 至 2024.4.11',  
-    '英業達 2356: 2020.01.02 至 2024.04.12',  
-    '堤維西 1522: 2020.01.02 至 2024.04.12',  
-    '0050 台灣50ETF: 2020.01.02 至 2025.03.10',  
-    '00631L 台灣50正2: 2023.04.17 至 2025.04.17',  
-    '華碩 2357: 2023.04.17 至 2025.04.16',  
-    '金融期貨 CBF: 2023.04.17 至 2025.04.17',  
-    '電子期貨 CCF: 2023.04.17 至 2025.04.16',  
-    '小型電子期貨 CDF: 2020.03.02 至 2025.04.14',  
-    '非金電期貨 CEF: 2023.04.17 至 2025.04.16',  
-    '摩台期貨 CMF: 2023.04.17 至 2025.04.17',  
-    '小型金融期貨 CQF: 2023.04.17 至 2025.04.17',  
-    '美元指數期貨 FXF: 2020.03.02 至 2025.04.14'  
-]  
+# 1. 完整商品對應 pkl 路徑與預設日期  
+products_info = {
+    '台積電 2330: 2020.01.02 至 2025.04.16':
+        ('exported/kbars_1min_2330_2020-01-02_To_2025-04-16.pkl',
+         '台積電 2330', '2020-01-02', '2025-04-16'),
+    '大台指期貨2024.12到期: 2023.12 至 2024.4.11':
+        ('exported/kbars_TXF202412_2023-12-21-2024-04-11.pkl',
+         '大台指期貨', '2023-12-21', '2024-04-11'),
+    '小台指期貨2024.12到期: 2023.12 至 2024.4.11':
+        ('exported/kbars_MXF202412_2023-12-21-2024-04-11.pkl',
+         '小台指期貨', '2023-12-21', '2024-04-11'),
+    '英業達 2356: 2020.01.02 至 2024.04.12':
+        ('exported/kbars_2356_2020-01-01-2024-04-12.pkl',
+         '英業達 2356', '2020-01-02', '2024-04-12'),
+    '堤維西 1522: 2020.01.02 至 2024.04.12':
+        ('exported/kbars_1522_2020-01-01-2024-04-12.pkl',
+         '堤維西 1522', '2020-01-02', '2024-04-12'),
+    '0050 台灣50ETF: 2020.01.02 至 2025.03.10':
+        ('exported/kbars_1min_0050_2020-01-02_To_2025-03-10.pkl',
+         '台灣50ETF 0050', '2020-01-02', '2025-03-10'),
+    '00631L 台灣50正2: 2023.04.17 至 2025.04.17':
+        ('exported/kbars_1min_00631L_2023-04-17_To_2025-04-17.pkl',
+         '台灣50正2 00631L', '2023-04-17', '2025-04-17'),
+    '華碩 2357: 2023.04.17 至 2025.04.16':
+        ('exported/kbars_1min_2357_2023-04-17_To_2025-04-16.pkl',
+         '華碩 2357', '2023-04-17', '2025-04-16'),
+    '金融期貨 CBF: 2023.04.17 至 2025.04.17':
+        ('exported/kbars_1min_CBF_2023-04-17_To_2025-04-17.pkl',
+         '金融期貨 CBF', '2023-04-17', '2025-04-17'),
+    '電子期貨 CCF: 2023.04.17 至 2025.04.16':
+        ('exported/kbars_1min_CCF_2023-04-17_To_2025-04-16.pkl',
+         '電子期貨 CCF', '2023-04-17', '2025-04-16'),
+    '小型電子期貨 CDF: 2020.03.02 至 2025.04.14':
+        ('exported/kbars_1min_CDF_2020-03-02_To_2025-04-14.pkl',
+         '小型電子期貨 CDF', '2020-03-02', '2025-04-14'),
+    '非金電期貨 CEF: 2023.04.17 至 2025.04.16':
+        ('exported/kbars_1min_CEF_2023-04-17_To_2025-04-16.pkl',
+         '非金電期貨 CEF', '2023-04-17', '2025-04-16'),
+    '摩台期貨 CMF: 2023.04.17 至 2025.04.17':
+        ('exported/kbars_1min_CMF_2023-04-17_To_2025-04-17.pkl',
+         '摩台期貨 CMF', '2023-04-17', '2025-04-17'),
+    '小型金融期貨 CQF: 2023.04.17 至 2025.04.17':
+        ('exported/kbars_1min_CQF_2023-04-17_To_2025-04-17.pkl',
+         '小型金融期貨 CQF', '2023-04-17', '2025-04-17'),
+    '美元指數期貨 FXF: 2020.03.02 至 2025.04.14':
+        ('exported/kbars_1min_FXF_2020-03-02_To_2025-04-14.pkl',
+         '美元指數期貨 FXF', '2020-03-02', '2025-04-14'),
+}
 
-# 2. 逐一回測並蒐集績效  
-summary_rows = []  
-for label in products:  
-    # 解析商品與期間  
-    symbol, period = label.split(':',1)  
-    symbol = symbol.strip()  
-    start_date, end_date = [d.strip() for d in period.split('至')]  
+summary_rows = []
+for label, (pkl_path, product_name, ds, de) in products_info.items():
+    # 讀資料並過濾日期
+    df_orig = load_data(pkl_path)
+    sd = datetime.datetime.strptime(ds, '%Y-%m-%d')
+    ed = datetime.datetime.strptime(de, '%Y-%m-%d')
+    df_sel = df_orig[(df_orig['time']>=sd) & (df_orig['time']<=ed)]
 
-    # 載入該商品的 KBar_df → 轉字典 KBar_dic  
-    df_prod = load_KBar_df(symbol, start_date, end_date)    # ← 請改成你實際讀資料的函式  
-    KBar_dic = toDictionary(df_prod)  
+    # 轉 Dictionary → 再變 KBar 週期 → DataFrame
+    KBar_dic = To_Dictionary_1(df_sel, product_name)
+    Date     = sd.strftime('%Y-%m-%d')
+    KBar_dic = Change_Cycle(Date, cycle_duration, KBar_dic, product_name)
+    KBar_df  = pd.DataFrame(KBar_dic)
 
-    # 建部位管理物件，依 isFuture 決定參數  
-    OrderRecord = Record(G_spread=3.628e-4, G_tax=0.003, G_commission=0.001425, isFuture=False)  
-    # 若是期貨，把 isFuture=True 並帶入手續費參數  
+    # 建 Record 並回測
+    is_fut = '期貨' in product_name
+    # 乘數：股票 1000，大台指 200，小台指 50，其餘期貨視合約乘數自行調整
+    m = 1000 if not is_fut else (200 if '大台指' in product_name else (50 if '小台指' in product_name else 1))
+    RecordObj = Record(G_spread=3.628e-4, G_tax=0.003, G_commission=0.001425, isFuture=is_fut)
+    back_test(RecordObj, KBar_dic)
 
-    # 執行回測  
-    C_equity, final_ret = back_test(OrderRecord, KBar_dic)  
+    # 計算績效
+    tpnl   = RecordObj.GetTotalProfit() * m
+    apnl   = RecordObj.GetAverageProfit() * m
+    aroi   = RecordObj.GetAverageProfitRate()
+    awin   = RecordObj.GetAverEarn() * m
+    aloss  = RecordObj.GetAverLoss() * m
+    wrate  = RecordObj.GetWinRate()
+    closs  = RecordObj.GetAccLoss() * m
+    mdd    = RecordObj.GetMDD() * m
+    rr     = tpnl / mdd if mdd>0 else np.nan
 
-    # 計算績效指標  
-    total_pnl   = GetTotalProfit(OrderRecord.Profit)  
-    avg_pnl     = GetAverageProfit(OrderRecord.Profit)  
-    avg_roi     = GetAverageProfitRate(OrderRecord.Profit_rate)  
-    avg_win     = GetAverEarn(OrderRecord.Profit)  
-    avg_loss    = GetAverLoss(OrderRecord.Profit)  
-    win_rate    = GetWinRate(OrderRecord.Profit)  
-    max_con_loss= GetAccLoss(OrderRecord.Profit)  
-    mdd         = OrderRecord.GetMDD()  
-    ratio       = total_pnl / mdd if mdd else np.nan  
+    summary_rows.append({
+        '商品':                     label,
+        '交易總盈虧(元)':           tpnl,
+        '平均每次盈虧(元)':         apnl,
+        '平均投資報酬率':           aroi,
+        '平均獲利(只看獲利的)(元)':    awin,
+        '平均虧損(只看虧損的)(元)':    aloss,
+        '勝率':                     wrate,
+        '最大連續虧損(元)':         closs,
+        '最大盈虧回落(MDD)(元)':     mdd,
+        '報酬風險比':               rr
+    })
 
-    summary_rows.append({  
-        '商品':                  label,  
-        '交易總盈虧(元)':        total_pnl,  
-        '平均每次盈虧(元)':      avg_pnl,  
-        '平均投資報酬率':        avg_roi,  
-        '平均獲利(只看獲利的)(元)':  avg_win,  
-        '平均虧損(只看虧損的)(元)':  avg_loss,  
-        '勝率':                  win_rate,  
-        '最大連續虧損(元)':      max_con_loss,  
-        '最大盈虧回落(MDD)(元)':  mdd,  
-        '報酬風險比(交易總盈虧/最大盈虧回落(MDD))': ratio  
-    })  
-
-# 3. 輸出 DataFrame 並顯示  
-df_summary = pd.DataFrame(summary_rows)  
+# 全部跑完後一次顯示
+df_summary = pd.DataFrame(summary_rows)
 st.table(df_summary)
+
 
 
 
