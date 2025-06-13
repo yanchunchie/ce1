@@ -1179,17 +1179,72 @@ if choice == choices[4] :   #'堤維西2020.1.2 至 2024.4.12':
 
 
 #%%  
-##### 将投資績效存储成一个DataFrame並以表格形式呈現各項績效數據
-if len(OrderRecord.Profit)>0:
-    data = {
-        "項目": ["交易總盈虧(元)", "平均每次盈虧(元)", "平均投資報酬率", "平均獲利(只看獲利的)(元)", "平均虧損(只看虧損的)(元)", "勝率", "最大連續虧損(元)", "最大盈虧回落(MDD)(元)", "報酬風險比(交易總盈虧/最大盈虧回落(MDD))"],
-        "數值": [交易總盈虧, 平均每次盈虧, 平均投資報酬率, 平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 最大連續虧損, 最大盈虧回落_MDD, 報酬風險比]
-    }
-    df = pd.DataFrame(data)
-    if len(df)>0:
-        st.write(df)
-else:
-    st.write('沒有交易記錄(已經了結之交易) !')
+##### （5）多商品回測績效表格化呈現  
+import pandas as pd  
+import numpy as np  
+
+# 1. 完整商品清單（無省略號）
+products = [
+    '台積電 2330: 2020.01.02 至 2025.04.16',
+    '大台指期貨2024.12到期: 2023.12 至 2024.4.11',
+    '小台指期貨2024.12到期: 2023.12 至 2024.4.11',
+    '英業達 2356: 2020.01.02 至 2024.04.12',
+    '堤維西 1522: 2020.01.02 至 2024.04.12',
+    '0050 台灣50ETF: 2020.01.02 至 2025.03.10',
+    '00631L 台灣50正2: 2023.04.17 至 2025.04.17',
+    '華碩 2357: 2023.04.17 至 2025.04.16',
+    '金融期貨 CBF: 2023.04.17 至 2025.04.17',
+    '電子期貨 CCF: 2023.04.17 至 2025.04.16',
+    '小型電子期貨 CDF: 2020.03.02 至 2025.04.14',
+    '非金電期貨 CEF: 2023.04.17 至 2025.04.16',
+    '摩台期貨 CMF: 2023.04.17 至 2025.04.17',
+    '小型金融期貨 CQF: 2023.04.17 至 2025.04.17',
+    '美元指數期貨 FXF: 2020.03.02 至 2025.04.14'
+]
+
+# 2. 主迴圈：依序跑回測、計算原本那些變數，並組成 summary 列表
+summary_rows = []
+for label in products:
+    symbol, period = label.split(':', 1)
+    symbol = symbol.strip()
+    start_date, end_date = [d.strip() for d in period.split('至')]
+
+    # ———— 這裡呼叫你的回測函式，取得 OrderRecord ————
+    #   請換成你真正的函式名稱 & 參數
+    OrderRecord = run_backtest(symbol, start_date, end_date)
+
+    # 計算所有績效變數（複製你原本計算交易總盈虧、平均 etc. 的程式）
+    if len(OrderRecord.Profit) > 0:
+        交易總盈虧           = OrderRecord.Profit.sum()
+        平均每次盈虧         = OrderRecord.Profit.mean()
+        平均投資報酬率       = np.mean(OrderRecord.Profit / OrderRecord.Cost)
+        平均獲利_只看獲利的   = np.mean([p for p in OrderRecord.Profit if p>0]) if any(p>0 for p in OrderRecord.Profit) else 0
+        平均虧損_只看虧損的   = np.mean([p for p in OrderRecord.Profit if p<0]) if any(p<0 for p in OrderRecord.Profit) else 0
+        勝率                 = np.mean([p>0 for p in OrderRecord.Profit])
+        最大連續虧損         = get_max_consecutive_loss(OrderRecord.Profit)      # 請自行定義工具函式
+        最大盈虧回落_MDD     = get_max_drawdown(OrderRecord.Equity)               # 請自行定義工具函式
+        報酬風險比           = 交易總盈虧 / 最大盈虧回落_MDD if 最大盈虧回落_MDD>0 else np.nan
+    else:
+        # 無交易時統一填 None
+        交易總盈虧 = 平均每次盈虧 = 平均投資報酬率 = 平均獲利_只看獲利的 = 平均虧損_只看虧損的 = 勝率 = 最大連續虧損 = 最大盈虧回落_MDD = 報酬風險比 = None
+
+    summary_rows.append({
+        '商品':                  label,
+        '交易總盈虧(元)':        交易總盈虧,
+        '平均每次盈虧(元)':      平均每次盈虧,
+        '平均投資報酬率':        平均投資報酬率,
+        '平均獲利(只看獲利的)(元)':  平均獲利_只看獲利的,
+        '平均虧損(只看虧損的)(元)':  平均虧損_只看虧損的,
+        '勝率':                  勝率,
+        '最大連續虧損(元)':      最大連續虧損,
+        '最大盈虧回落(MDD)(元)':  最大盈虧回落_MDD,
+        '報酬風險比(交易總盈虧/最大盈虧回落(MDD))': 報酬風險比
+    })
+
+# 3. 輸出成 DataFrame 並顯示
+df_summary = pd.DataFrame(summary_rows)
+st.table(df_summary)
+
 
 
 
