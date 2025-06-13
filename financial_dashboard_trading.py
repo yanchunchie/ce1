@@ -462,16 +462,42 @@ KBar_df['TRIX'] = Calculate_TRIX(KBar_df, trix_period)
 
 #%%
 #####  (xiv) PSAR - 停損轉向指標（Parabolic SAR）
-import ta
+@st.cache_data(ttl=3600)
+def Calculate_PSAR(df, af_start=0.02, af_step=0.02, af_max=0.2):
+    high = df['high'].values
+    low  = df['low'].values
+    close= df['close'].values
+    psar = np.zeros_like(close)
+    psar[:] = np.nan
+    trend = 1  # 1=向上, -1=向下
+    af = af_start
+    ep = high[0]  # extreme point
+    psar[0] = low[0]
 
-@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
-def Calculate_PSAR(df):
-    from ta.trend import PSARIndicator
-    psar = PSARIndicator(df['high'], df['low'], df['close'], step=0.02, max_step=0.2)
-    return psar.psar()
-
-with st.expander("載入 PSAR（停損轉向）指標"):
-    KBar_df['PSAR'] = Calculate_PSAR(KBar_df)
+    for i in range(1, len(close)):
+        prev_psar = psar[i-1]
+        psar[i] = prev_psar + af * (ep - prev_psar)
+        if trend == 1:
+            psar[i] = min(psar[i], low[i-1], low[i])
+            if high[i] > ep:
+                ep = high[i]
+                af = min(af + af_step, af_max)
+            if close[i] < psar[i]:
+                trend = -1
+                ep = low[i]
+                af = af_start
+                psar[i] = ep
+        else:
+            psar[i] = max(psar[i], high[i-1], high[i])
+            if low[i] < ep:
+                ep = low[i]
+                af = min(af + af_step, af_max)
+            if close[i] > psar[i]:
+                trend = 1
+                ep = high[i]
+                af = af_start
+                psar[i] = ep
+    return pd.Series(psar, index=df.index)
 
 
 
