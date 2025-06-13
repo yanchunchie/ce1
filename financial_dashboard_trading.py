@@ -199,6 +199,7 @@ KBar_dic = Change_Cycle(Date,cycle_duration,KBar_dic,product_name)   ## 設定cy
 KBar_df = pd.DataFrame(KBar_dic)
 
 
+
 #%%
 ####### (4) 計算各種技術指標 #######
 
@@ -803,6 +804,24 @@ st.subheader("程式交易:")
 #%%
 ###### 函數定義: 繪製K線圖加上MA以及下單點位
 # @st.cache_data(ttl=3600, show_spinner="正在加載資料...")  ## Add the caching decorator
+# 取得當前所選商品的 KBar_df
+df_trade = KBar_dfs.get(choice)
+if df_trade is not None:
+    # 再跑一次 MA 交叉策略，取得交易記錄
+    rec2 = Record()
+    rec2 = back_test_ma_strategy(
+        rec2,
+        df_trade,
+        MoveStopLoss,
+        LongMAPeriod,
+        ShortMAPeriod,
+        Order_Quantity
+    )
+    # 繪製下單點位
+    ChartOrder_MA(df_trade, rec2.GetTradeRecord())
+else:
+    st.error("無法取得 KBar_df，程式交易失敗")
+
 def ChartOrder_MA(Kbar_df,TR):
     # # 將K線轉為DataFrame
     # Kbar_df=KbarToDf(KBar)
@@ -1106,7 +1125,9 @@ products_info = {
 }
 # 用來存每支商品跑完策略後的 RecordObj
 record_objs = {}
-
+# 存每支商品的 KBar_df 與回測物件
+KBar_dfs     = {}
+record_objs  = {}
 summary_rows = []
 for label, (pkl_path, product_name, ds, de) in products_info.items():
     # … 前面已經 load_data、To_Dictionary_1、Change_Cycle → KBar_df …
@@ -1190,23 +1211,33 @@ st.table(df_summary)
 ##### 畫累計盈虧圖 用多商品迴圈結果
 # 先從 record_objs 裡撈出對應的 RecordObj
 rec = record_objs.get(choice)
-if rec is None:
-    st.error("錯誤：尚未跑回測，無法畫累計盈虧圖。")
-else:
-    # 依照原本的參數呼叫它的方法
-    # 注意：choice 參數填你要的 'stock'、'future1' 或 'future2'
-    # 可以用一個 map 定義各商品對應字串
+if rec:
     map_type = {
-      choices[0]: 'stock',
-      choices[1]: 'future1',
-      choices[2]: 'future2',
-      choices[3]: 'stock',
-      choices[4]: 'stock'
+        choices[0]: 'stock',
+        choices[1]: 'future1',
+        choices[2]: 'future2',
+        choices[3]: 'stock',
+        choices[4]: 'stock'
     }
-    rec_type = map_type[choice]
-    rec.GeneratorProfitChart(choice=rec_type, StrategyName='MA')
+    rec.GeneratorProfitChart(
+        choice=map_type[choice],
+        StrategyName='MA'
+    )
     rec.GeneratorProfit_rateChart(StrategyName='MA')
+else:
+    st.error("請先執行回測，才能畫累計盈虧圖")
 
+
+df_trade = KBar_dfs.get(choice)
+if df_trade is not None:
+    rec2 = Record()
+    rec2 = back_test_ma_strategy(
+        rec2, df_trade,
+        MoveStopLoss, LongMAPeriod, ShortMAPeriod, Order_Quantity
+    )
+    ChartOrder_MA(df_trade, rec2.GetTradeRecord())
+else:
+    st.error("無法取得 KBar_df")
 
     
 
