@@ -515,6 +515,8 @@ from plotly.subplots import make_subplots
 import pandas as pd
 #from plotly.offline import plot
 # import plotly.offline as pyoff
+if 'PSAR' not in KBar_df.columns:
+    KBar_df['PSAR'] = Calculate_PSAR(KBar_df)
 
 
 ###### K線圖, 移動平均線MA
