@@ -1104,6 +1104,8 @@ products_info = {
         ('exported/kbars_1min_FXF_2020-03-02_To_2025-04-14.pkl',
          '美元指數期貨 FXF', '2020-03-02', '2025-04-14'),
 }
+# 用來存每支商品跑完策略後的 RecordObj
+record_objs = {}
 
 summary_rows = []
 for label, (pkl_path, product_name, ds, de) in products_info.items():
@@ -1137,7 +1139,8 @@ for label, (pkl_path, product_name, ds, de) in products_info.items():
     closs  = RecordObj.GetAccLoss()        * m
     mdd    = RecordObj.GetMDD()            * m
     rr     = tpnl / mdd if mdd>0 else np.nan
-
+    # 把剛算完、含交易紀錄的 RecordObj 存起來
+    record_objs[label] = RecordObj
     summary_rows.append({
         '商品':                     label,
         '交易總盈虧(元)':           tpnl,
@@ -1184,18 +1187,26 @@ st.table(df_summary)
 
 
 
-#%%
-##### 畫累計盈虧圖:
-if choice == choices[0] :     ##'台積電: 2022.1.1 至 2024.4.9':
-    OrderRecord.GeneratorProfitChart(choice='stock',StrategyName='MA')
-if choice == choices[1] :                 ##'大台指期貨2024.12到期: 2023.12 至 2024.4.11':
-    OrderRecord.GeneratorProfitChart(choice='future1',StrategyName='MA')
-if choice == choices[2] :                            ##'小台指期貨2024.12到期: 2023.12 至 2024.4.11':
-    OrderRecord.GeneratorProfitChart(choice='future2',StrategyName='MA')
-if choice == choices[3] :                                        ##'英業達2020.1.2 至 2024.4.12':
-    OrderRecord.GeneratorProfitChart(choice='stock',StrategyName='MA')
-if choice == choices[4] :                                                    ##'堤維西2020.1.2 至 2024.4.12':
-    OrderRecord.GeneratorProfitChart(choice='stock',StrategyName='MA')
+##### 畫累計盈虧圖 用多商品迴圈結果
+# 先從 record_objs 裡撈出對應的 RecordObj
+rec = record_objs.get(choice)
+if rec is None:
+    st.error("錯誤：尚未跑回測，無法畫累計盈虧圖。")
+else:
+    # 依照原本的參數呼叫它的方法
+    # 注意：choice 參數填你要的 'stock'、'future1' 或 'future2'
+    # 可以用一個 map 定義各商品對應字串
+    map_type = {
+      choices[0]: 'stock',
+      choices[1]: 'future1',
+      choices[2]: 'future2',
+      choices[3]: 'stock',
+      choices[4]: 'stock'
+    }
+    rec_type = map_type[choice]
+    rec.GeneratorProfitChart(choice=rec_type, StrategyName='MA')
+    rec.GeneratorProfit_rateChart(StrategyName='MA')
+
 
     
 
@@ -1251,7 +1262,7 @@ if choice == choices[4] :                                                    ##'
 
 #%%
 ##### 畫累計投資報酬率圖:
-OrderRecord.GeneratorProfit_rateChart(StrategyName='MA')
+#OrderRecord.GeneratorProfit_rateChart(StrategyName='MA')
 # matplotlib.rcParams['font.family'] = 'Noto Sans CJK JP'
 # matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
