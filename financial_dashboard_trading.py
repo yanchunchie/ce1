@@ -197,7 +197,6 @@ KBar_dic = Change_Cycle(Date,cycle_duration,KBar_dic,product_name)   ## 設定cy
 ###### 將K線 Dictionary 轉換成 Dataframe
 KBar_df = pd.DataFrame(KBar_dic)
 
-
 #%%
 ####### (4) 計算各種技術指標 #######
 
@@ -329,12 +328,157 @@ if len(nan_indexes_MACD) > 0:
 else:
     last_nan_index_MACD = 0
 
+#%%
+######  (v) ATR（Average True Range）波動率指標 
+@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
+def Calculate_ATR(df, period=14):
+    high_low = df['high'] - df['low']
+    high_close = (df['high'] - df['close'].shift()).abs()
+    low_close = (df['low'] - df['close'].shift()).abs()
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = tr.rolling(window=period).mean()
+    return atr
+
+with st.expander("設定 ATR 波動率參數:"):
+    atr_period = st.slider("設定 ATR 計算週期", 1, 100, 14, key='visualization_ATR')
+
+KBar_df['ATR'] = Calculate_ATR(KBar_df, atr_period)
+last_nan_index_ATR = KBar_df['ATR'][::-1].index[KBar_df['ATR'][::-1].apply(pd.isna)][0]
+
+#%%
+######  (vi) OBV（On-Balance Volume）指標
+@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
+def Calculate_OBV(df):
+    obv = [0]
+    for i in range(1, len(df)):
+        if df['close'][i] > df['close'][i-1]:
+            obv.append(obv[-1] + df['volume'][i])
+        elif df['close'][i] < df['close'][i-1]:
+            obv.append(obv[-1] - df['volume'][i])
+        else:
+            obv.append(obv[-1])
+    return pd.Series(obv, index=df.index)
+
+KBar_df['OBV'] = Calculate_OBV(KBar_df)
+last_nan_index_OBV = 0  # OBV 一開始就不會有 NaN
+
+#%%
+#####  (vii) CCI - 商品通道指標
+@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
+def Calculate_CCI(df, period=20):
+    tp = (df['high'] + df['low'] + df['close']) / 3
+    sma = tp.rolling(window=period).mean()
+    mad = tp.rolling(window=period).apply(lambda x: np.fabs(x - x.mean()).mean())
+    cci = (tp - sma) / (0.015 * mad)
+    return cci
+
+with st.expander("設定 CCI 參數"):
+    cci_period = st.slider("CCI 計算週期", 1, 100, 20)
+KBar_df['CCI'] = Calculate_CCI(KBar_df, cci_period)
+
+
+#%%
+##### (viii) Stochastic Oscillator - KD 隨機震盪指標
+
+@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
+def Calculate_KD(df, k_period=14, d_period=3):
+    low_min = df['low'].rolling(window=k_period).min()
+    high_max = df['high'].rolling(window=k_period).max()
+    rsv = 100 * (df['close'] - low_min) / (high_max - low_min)
+    k = rsv.ewm(alpha=1/d_period, adjust=False).mean()
+    d = k.ewm(alpha=1/d_period, adjust=False).mean()
+    return k, d
+
+with st.expander("設定 KD 隨機震盪指標參數"):
+    k_period = st.slider("K 週期", 1, 100, 14)
+    d_period = st.slider("D 平滑週期", 1, 10, 3)
+KBar_df['K'], KBar_df['D'] = Calculate_KD(KBar_df, k_period, d_period)
+
+#%%
+#####  (ix) WILLR - 威廉指標（逆勢超買超賣）
+
+@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
+def Calculate_WILLR(df, period=14):
+    high_max = df['high'].rolling(window=period).max()
+    low_min = df['low'].rolling(window=period).min()
+    willr = -100 * (high_max - df['close']) / (high_max - low_min)
+    return willr
+
+with st.expander("設定 威廉指標 (WILLR) 參數"):
+    willr_period = st.slider("WILLR 計算週期", 1, 100, 14)
+KBar_df['WILLR'] = Calculate_WILLR(KBar_df, willr_period)
+
+#%%
+##### (x) MFI - 資金流量指標（RSI + 成交量）
+
+@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
+def Calculate_MFI(df, period=14):
+    tp = (df['high'] + df['low'] + df['close']) / 3
+    mf = tp * df['volume']
+    pos_mf = mf.where(tp > tp.shift(), 0)
+    neg_mf = mf.where(tp < tp.shift(), 0)
+    mfr = pos_mf.rolling(window=period).sum() / neg_mf.rolling(window=period).sum()
+    mfi = 100 - (100 / (1 + mfr))
+    return mfi
+
+with st.expander("設定 MFI（資金流量）參數"):
+    mfi_period = st.slider("MFI 計算週期", 1, 100, 14)
+KBar_df['MFI'] = Calculate_MFI(KBar_df, mfi_period)
+
+#%%
+#####  (xi) ROC - 價格變動率指標
+@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
+def Calculate_ROC(df, period=12):
+    roc = ((df['close'] - df['close'].shift(period)) / df['close'].shift(period)) * 100
+    return roc
+
+with st.expander("設定 ROC（變動率）參數"):
+    roc_period = st.slider("ROC 計算週期", 1, 100, 12)
+KBar_df['ROC'] = Calculate_ROC(KBar_df, roc_period)
+
+#%%
+#####  (xii) Momentum - 動能指標
+@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
+def Calculate_MOM(df, period=10):
+    return df['close'] - df['close'].shift(period)
+
+with st.expander("設定 MOM（動能）參數"):
+    mom_period = st.slider("MOM 計算週期", 1, 100, 10)
+KBar_df['MOM'] = Calculate_MOM(KBar_df, mom_period)
+
+#%%
+#####  (xiii) TRIX - 三重平滑移動平均動能
+@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
+def Calculate_TRIX(df, period=15):
+    ema1 = df['close'].ewm(span=period, adjust=False).mean()
+    ema2 = ema1.ewm(span=period, adjust=False).mean()
+    ema3 = ema2.ewm(span=period, adjust=False).mean()
+    trix = 100 * (ema3 - ema3.shift()) / ema3.shift()
+    return trix
+
+with st.expander("設定 TRIX（三重 EMA 動能）參數"):
+    trix_period = st.slider("TRIX 計算週期", 1, 100, 15)
+KBar_df['TRIX'] = Calculate_TRIX(KBar_df, trix_period)
+
+#%%
+#####  (xiv) PSAR - 停損轉向指標（Parabolic SAR）
+import ta
+
+@st.cache_data(ttl=3600, show_spinner="正在加載資料...")
+def Calculate_PSAR(df):
+    from ta.trend import PSARIndicator
+    psar = PSARIndicator(df['high'], df['low'], df['close'], step=0.02, max_step=0.2)
+    return psar.psar()
+
+with st.expander("載入 PSAR（停損轉向）指標"):
+    KBar_df['PSAR'] = Calculate_PSAR(KBar_df)
 
 
 
 # ####### (5) 將 Dataframe 欄位名稱轉換(第一個字母大寫)  ####### 
 # KBar_df_original = KBar_df
 # KBar_df.columns = [ i[0].upper()+i[1:] for i in KBar_df.columns ]
+
 
 
 #%%
@@ -450,6 +594,170 @@ with st.expander("MACD(異同移動平均線)"):
     fig4.layout.yaxis2.showgrid=True
     st.plotly_chart(fig4, use_container_width=True)
 
+with st.expander("ATR（波動率指標）"):
+    fig5 = make_subplots(specs=[[{"secondary_y": True}]])
+    fig5.update_layout(
+        yaxis=dict(fixedrange=False, autorange=True),
+        xaxis=dict(rangeslider=dict(visible=True))
+    )
+    fig5.add_trace(go.Scatter(
+        x=KBar_df['time'][last_nan_index_ATR+1:], 
+        y=KBar_df['ATR'][last_nan_index_ATR+1:], 
+        mode='lines', line=dict(color='purple', width=2), name='ATR'
+    ), secondary_y=False)
+    st.plotly_chart(fig5, use_container_width=True)
+
+with st.expander("OBV（量價關係指標）"):
+    fig6 = make_subplots(specs=[[{"secondary_y": True}]])
+    fig6.update_layout(
+        yaxis=dict(fixedrange=False, autorange=True),
+        xaxis=dict(rangeslider=dict(visible=True))
+    )
+    fig6.add_trace(go.Scatter(
+        x=KBar_df['time'], 
+        y=KBar_df['OBV'], 
+        mode='lines', line=dict(color='green', width=2), name='OBV'
+    ), secondary_y=False)
+    st.plotly_chart(fig6, use_container_width=True)
+
+# 計算各指標的最後 NaN 索引位置
+last_nan_index_CCI   = KBar_df['CCI'][::-1].index[KBar_df['CCI'][::-1].apply(pd.isna)][0]
+last_nan_index_KD    = KBar_df['K'][::-1].index[KBar_df['K'][::-1].apply(pd.isna)][0]
+last_nan_index_WILLR = KBar_df['WILLR'][::-1].index[KBar_df['WILLR'][::-1].apply(pd.isna)][0]
+last_nan_index_MFI   = KBar_df['MFI'][::-1].index[KBar_df['MFI'][::-1].apply(pd.isna)][0]
+last_nan_index_ROC   = KBar_df['ROC'][::-1].index[KBar_df['ROC'][::-1].apply(pd.isna)][0]
+last_nan_index_MOM   = KBar_df['MOM'][::-1].index[KBar_df['MOM'][::-1].apply(pd.isna)][0]
+last_nan_index_TRIX  = KBar_df['TRIX'][::-1].index[KBar_df['TRIX'][::-1].apply(pd.isna)][0]
+# PSAR 通常不產生 NaN，可直接從頭繪製
+
+# CCI
+with st.expander("CCI - 商品通道指標"):
+    fig6 = make_subplots(specs=[[{"secondary_y": False}]])
+    fig6.update_layout(xaxis=dict(rangeslider=dict(visible=True)))
+    fig6.add_trace(
+        go.Scatter(
+            x=KBar_df['time'][last_nan_index_CCI+1:],
+            y=KBar_df['CCI'][last_nan_index_CCI+1:],
+            mode='lines',
+            name=f'CCI({cci_period})'
+        )
+    )
+    st.plotly_chart(fig6, use_container_width=True)
+
+# KD 隨機震盪指標
+with st.expander("KD 隨機震盪指標"):
+    fig7 = make_subplots(specs=[[{"secondary_y": False}]])
+    fig7.update_layout(xaxis=dict(rangeslider=dict(visible=True)))
+    fig7.add_trace(
+        go.Scatter(
+            x=KBar_df['time'][last_nan_index_KD+1:],
+            y=KBar_df['K'][last_nan_index_KD+1:],
+            mode='lines',
+            name=f'K({k_period})'
+        )
+    )
+    fig7.add_trace(
+        go.Scatter(
+            x=KBar_df['time'][last_nan_index_KD+1:],
+            y=KBar_df['D'][last_nan_index_KD+1:],
+            mode='lines',
+            name=f'D({d_period})'
+        )
+    )
+    st.plotly_chart(fig7, use_container_width=True)
+
+# WILLR 威廉指標
+with st.expander("WILLR - 威廉指標"):
+    fig8 = make_subplots(specs=[[{"secondary_y": False}]])
+    fig8.update_layout(xaxis=dict(rangeslider=dict(visible=True)))
+    fig8.add_trace(
+        go.Scatter(
+            x=KBar_df['time'][last_nan_index_WILLR+1:],
+            y=KBar_df['WILLR'][last_nan_index_WILLR+1:],
+            mode='lines',
+            name=f'WILLR({willr_period})'
+        )
+    )
+    st.plotly_chart(fig8, use_container_width=True)
+
+# MFI 資金流量指標
+with st.expander("MFI - 資金流量指標"):
+    fig9 = make_subplots(specs=[[{"secondary_y": False}]])
+    fig9.update_layout(xaxis=dict(rangeslider=dict(visible=True)))
+    fig9.add_trace(
+        go.Scatter(
+            x=KBar_df['time'][last_nan_index_MFI+1:],
+            y=KBar_df['MFI'][last_nan_index_MFI+1:],
+            mode='lines',
+            name=f'MFI({mfi_period})'
+        )
+    )
+    st.plotly_chart(fig9, use_container_width=True)
+
+# ROC 價格變動率指標
+with st.expander("ROC - 價格變動率指標"):
+    fig10 = make_subplots(specs=[[{"secondary_y": False}]])
+    fig10.update_layout(xaxis=dict(rangeslider=dict(visible=True)))
+    fig10.add_trace(
+        go.Scatter(
+            x=KBar_df['time'][last_nan_index_ROC+1:],
+            y=KBar_df['ROC'][last_nan_index_ROC+1:],
+            mode='lines',
+            name=f'ROC({roc_period})'
+        )
+    )
+    st.plotly_chart(fig10, use_container_width=True)
+
+# MOM 動能指標
+with st.expander("MOM - 動能指標"):
+    fig11 = make_subplots(specs=[[{"secondary_y": False}]])
+    fig11.update_layout(xaxis=dict(rangeslider=dict(visible=True)))
+    fig11.add_trace(
+        go.Scatter(
+            x=KBar_df['time'][last_nan_index_MOM+1:],
+            y=KBar_df['MOM'][last_nan_index_MOM+1:],
+            mode='lines',
+            name=f'MOM({mom_period})'
+        )
+    )
+    st.plotly_chart(fig11, use_container_width=True)
+
+# TRIX 三重平滑移動平均動能
+with st.expander("TRIX - 三重平滑移動平均動能"):
+    fig12 = make_subplots(specs=[[{"secondary_y": False}]])
+    fig12.update_layout(xaxis=dict(rangeslider=dict(visible=True)))
+    fig12.add_trace(
+        go.Scatter(
+            x=KBar_df['time'][last_nan_index_TRIX+1:],
+            y=KBar_df['TRIX'][last_nan_index_TRIX+1:],
+            mode='lines',
+            name=f'TRIX({trix_period})'
+        )
+    )
+    st.plotly_chart(fig12, use_container_width=True)
+
+# PSAR 停損轉向指標
+with st.expander("PSAR - 停損轉向指標"):
+    fig13 = make_subplots(specs=[[{"secondary_y": True}]])
+    fig13.update_layout(
+        yaxis=dict(fixedrange=False, autorange=True),
+        xaxis=dict(rangeslider=dict(visible=True))
+    )
+    # 繪製 K 線
+    fig13.add_trace(
+        go.Candlestick(
+            x=KBar_df['time'], open=KBar_df['open'], high=KBar_df['high'],
+            low=KBar_df['low'], close=KBar_df['close'], name='K線'
+        ), secondary_y=True
+    )
+    # 繪製 PSAR 點位
+    fig13.add_trace(
+        go.Scatter(
+            x=KBar_df['time'], y=KBar_df['PSAR'], mode='markers',
+            marker=dict(symbol='circle-open', size=6), name='PSAR'
+        ), secondary_y=True
+    )
+    st.plotly_chart(fig13, use_container_width=True)
 
 
 #%%
