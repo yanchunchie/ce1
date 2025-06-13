@@ -1235,34 +1235,25 @@ products_info = {
 
 summary_rows = []
 for label, (pkl_path, product_name, ds, de) in products_info.items():
-    # 讀資料並過濾日期
-    df_orig = load_data(pkl_path)
-    sd = datetime.datetime.strptime(ds, '%Y-%m-%d')
-    ed = datetime.datetime.strptime(de, '%Y-%m-%d')
-    df_sel = df_orig[(df_orig['time']>=sd) & (df_orig['time']<=ed)]
+    # … 前面已經 load_data、To_Dictionary_1、Change_Cycle → KBar_df …
 
-    # 轉 Dictionary → 再變 KBar 週期 → DataFrame
-    KBar_dic = To_Dictionary_1(df_sel, product_name)
-    Date     = sd.strftime('%Y-%m-%d')
-    KBar_dic = Change_Cycle(Date, cycle_duration, KBar_dic, product_name)
-    KBar_df  = pd.DataFrame(KBar_dic)
-
-    # 建 Record 並回測
+    # 乘數判斷
     is_fut = '期貨' in product_name
-    # 乘數：股票 1000，大台指 200，小台指 50，其餘期貨視合約乘數自行調整
     m = 1000 if not is_fut else (200 if '大台指' in product_name else (50 if '小台指' in product_name else 1))
-    RecordObj = Record(G_spread=3.628e-4, G_tax=0.003, G_commission=0.001425, isFuture=is_fut)
+
+    # ── 這裡改成無參數建構子 ──
+    RecordObj = Record()
     back_test(RecordObj, KBar_dic)
 
     # 計算績效
-    tpnl   = RecordObj.GetTotalProfit() * m
-    apnl   = RecordObj.GetAverageProfit() * m
+    tpnl   = RecordObj.GetTotalProfit()    * m
+    apnl   = RecordObj.GetAverageProfit()  * m
     aroi   = RecordObj.GetAverageProfitRate()
-    awin   = RecordObj.GetAverEarn() * m
-    aloss  = RecordObj.GetAverLoss() * m
+    awin   = RecordObj.GetAverEarn()       * m
+    aloss  = RecordObj.GetAverLoss()       * m
     wrate  = RecordObj.GetWinRate()
-    closs  = RecordObj.GetAccLoss() * m
-    mdd    = RecordObj.GetMDD() * m
+    closs  = RecordObj.GetAccLoss()        * m
+    mdd    = RecordObj.GetMDD()            * m
     rr     = tpnl / mdd if mdd>0 else np.nan
 
     summary_rows.append({
