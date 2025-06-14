@@ -1205,359 +1205,6 @@ with st.expander("PSAR - 停損轉向指標"):
     )
     st.plotly_chart(fig13, use_container_width=True)
 
-
-#%%
-####### (6) 程式交易 ####### 
-st.subheader("程式交易:")
-
-# 在選擇金融商品後初始化 OrderRecord
-OrderRecord = Record()
-
-# 新增策略選擇
-choices_strategies = [
-    '移動平均線策略',
-    'RSI逆勢策略',
-    '布林通道策略',
-    'MACD策略',
-    'ATR波動率策略',
-    'KD隨機指標策略',
-    '多策略組合'
-]
-choice_strategy = st.selectbox('選擇交易策略', choices_strategies, index=0)
-
-# 最佳化參數搜索開關
-optimize_params = st.checkbox('啟用最佳化參數搜索', value=False)
-
-# 通用參數設定
-with st.expander("通用參數設定"):
-    MoveStopLoss = st.slider('停損點數(股票:每股; 期貨:指數點數)', 1, 100, 30)
-    Order_Quantity = st.slider('交易數量(股票:張; 期貨:口數)', 1, 100, 1)
-    max_optimization_iterations = st.slider('最佳化最大迭代次數', 10, 500, 50) if optimize_params else 0
-
-# 策略專屬參數設定
-strategy_params = {}
-if choice_strategy == '移動平均線策略':
-    with st.expander("移動平均線策略參數"):
-        strategy_params['LongMAPeriod'] = st.slider('長移動平均線週期', 5, 100, 20)
-        strategy_params['ShortMAPeriod'] = st.slider('短移動平均線週期', 1, 50, 5)
-        
-        if optimize_params:
-            strategy_params['optimize_LongMAPeriod'] = st.slider('長MA最佳化範圍', 10, 100, (15, 50))
-            strategy_params['optimize_ShortMAPeriod'] = st.slider('短MA最佳化範圍', 1, 30, (3, 15))
-
-elif choice_strategy == 'RSI逆勢策略':
-    with st.expander("RSI策略參數"):
-        strategy_params['RSIPeriod'] = st.slider('RSI週期', 5, 30, 14)
-        strategy_params['OverSold'] = st.slider('超賣閾值', 1, 40, 30)
-        strategy_params['OverBought'] = st.slider('超買閾值', 60, 100, 70)
-        
-        if optimize_params:
-            strategy_params['optimize_RSIPeriod'] = st.slider('RSI週期最佳化範圍', 5, 30, (10, 20))
-            strategy_params['optimize_OverSold'] = st.slider('超賣閾值最佳化範圍', 20, 40, (25, 35))
-            strategy_params['optimize_OverBought'] = st.slider('超買閾值最佳化範圍', 65, 85, (70, 80))
-
-elif choice_strategy == '布林通道策略':
-    with st.expander("布林通道策略參數"):
-        strategy_params['BBPeriod'] = st.slider('布林通道週期', 10, 50, 20)
-        strategy_params['NumStdDev'] = st.slider('標準差倍數', 1.0, 3.0, 2.0)
-        
-        if optimize_params:
-            strategy_params['optimize_BBPeriod'] = st.slider('BB週期最佳化範圍', 10, 50, (15, 30))
-            strategy_params['optimize_NumStdDev'] = st.slider('標準差倍數最佳化範圍', 1.5, 2.5, (1.8, 2.2))
-
-elif choice_strategy == 'MACD策略':
-    with st.expander("MACD策略參數"):
-        strategy_params['FastPeriod'] = st.slider('快速線週期', 5, 20, 12)
-        strategy_params['SlowPeriod'] = st.slider('慢速線週期', 15, 50, 26)
-        strategy_params['SignalPeriod'] = st.slider('訊號線週期', 5, 20, 9)
-        
-        if optimize_params:
-            strategy_params['optimize_FastPeriod'] = st.slider('快速線最佳化範圍', 8, 20, (10, 15))
-            strategy_params['optimize_SlowPeriod'] = st.slider('慢速線最佳化範圍', 20, 40, (22, 30))
-            strategy_params['optimize_SignalPeriod'] = st.slider('訊號線最佳化範圍', 5, 15, (7, 12))
-
-elif choice_strategy == 'ATR波動率策略':
-    with st.expander("ATR策略參數"):
-        strategy_params['ATRPeriod'] = st.slider('ATR週期', 5, 30, 14)
-        strategy_params['ATRMultiplier'] = st.slider('ATR倍數', 1.0, 5.0, 2.0)
-        
-        if optimize_params:
-            strategy_params['optimize_ATRPeriod'] = st.slider('ATR週期最佳化範圍', 10, 25, (12, 18))
-            strategy_params['optimize_ATRMultiplier'] = st.slider('ATR倍數最佳化範圍', 1.5, 3.5, (2.0, 3.0))
-
-elif choice_strategy == 'KD隨機指標策略':
-    with st.expander("KD策略參數"):
-        strategy_params['KPeriod'] = st.slider('K值週期', 5, 20, 9)
-        strategy_params['DPeriod'] = st.slider('D值週期', 3, 10, 3)
-        strategy_params['OverSold'] = st.slider('超賣閾值', 10, 30, 20)
-        strategy_params['OverBought'] = st.slider('超買閾值', 70, 90, 80)
-        
-        if optimize_params:
-            strategy_params['optimize_KPeriod'] = st.slider('K值週期最佳化範圍', 5, 20, (7, 14))
-            strategy_params['optimize_DPeriod'] = st.slider('D值週期最佳化範圍', 3, 10, (3, 6))
-            strategy_params['optimize_OverSold'] = st.slider('超賣閾值最佳化範圍', 20, 30, (20, 25))
-            strategy_params['optimize_OverBought'] = st.slider('超買閾值最佳化範圍', 70, 85, (75, 80))
-
-elif choice_strategy == '多策略組合':
-    with st.expander("組合策略參數"):
-        strategy_params['Weight_MA'] = st.slider('MA策略權重', 0.0, 1.0, 0.4)
-        strategy_params['Weight_RSI'] = st.slider('RSI策略權重', 0.0, 1.0, 0.3)
-        strategy_params['Weight_BB'] = st.slider('BB策略權重', 0.0, 1.0, 0.3)
-
-# 回测按钮
-if st.button('開始回測'):
-    # 建立部位管理物件
-    # 判斷是否為期貨商品
-    is_future = False
-    for key in product_info:
-        if "期貨" in key:
-            is_future = True
-            break
-    
-    if is_future:  # 期貨商品
-        OrderRecord = Record(spread=3.628e-4, tax=0.00002, commission=0.0002, isFuture=True)
-    else:  # 股票商品
-        OrderRecord = Record(spread=3.628e-4, tax=0.003, commission=0.001425, isFuture=False)
-        
-    # 根據選擇的策略執行回測
-    if choice_strategy == '移動平均線策略':
-        if optimize_params:
-            # 執行最佳化參數搜索
-            best_params = optimize_ma_strategy(
-                KBar_df, 
-                strategy_params['optimize_LongMAPeriod'],
-                strategy_params['optimize_ShortMAPeriod'],
-                max_iterations=max_optimization_iterations
-            )
-            strategy_params['LongMAPeriod'] = best_params[0]
-            strategy_params['ShortMAPeriod'] = best_params[1]
-            st.success(f"最佳參數: 長MA={best_params[0]}, 短MA={best_params[1]}")
-        
-        # 使用最佳參數執行回測
-        OrderRecord = back_test_ma_strategy(
-            OrderRecord, KBar_df,
-            MoveStopLoss, 
-            strategy_params['LongMAPeriod'], 
-            strategy_params['ShortMAPeriod'], 
-            Order_Quantity
-        )
-        
-    elif choice_strategy == 'RSI逆勢策略':
-        # 計算RSI
-        KBar_df['RSI'] = Calculate_RSI(KBar_df, period=strategy_params['RSIPeriod'])
-        
-        if optimize_params:
-            # 執行最佳化參數搜索
-            best_params = optimize_rsi_strategy(
-                KBar_df, 
-                strategy_params['optimize_RSIPeriod'],
-                strategy_params['optimize_OverSold'],
-                strategy_params['optimize_OverBought'],
-                max_iterations=max_optimization_iterations
-            )
-            strategy_params['RSIPeriod'] = best_params[0]
-            strategy_params['OverSold'] = best_params[1]
-            strategy_params['OverBought'] = best_params[2]
-            st.success(f"最佳參數: RSI週期={best_params[0]}, 超賣={best_params[1]}, 超買={best_params[2]}")
-        
-        # 使用最佳參數執行回測
-        OrderRecord = back_test_rsi_strategy(
-            OrderRecord, KBar_df,
-            MoveStopLoss, 
-            strategy_params['RSIPeriod'], 
-            strategy_params['OverSold'], 
-            strategy_params['OverBought'], 
-            Order_Quantity
-        )
-    
-    elif choice_strategy == '布林通道策略':
-        # 計算布林通道
-        KBar_df = Calculate_Bollinger_Bands(KBar_df, 
-                                           period=strategy_params['BBPeriod'], 
-                                           num_std_dev=strategy_params['NumStdDev'])
-        
-        if optimize_params:
-            # 執行最佳化參數搜索
-            best_params = optimize_bb_strategy(
-                KBar_df, 
-                strategy_params['optimize_BBPeriod'],
-                strategy_params['optimize_NumStdDev'],
-                max_iterations=max_optimization_iterations
-            )
-            strategy_params['BBPeriod'] = best_params[0]
-            strategy_params['NumStdDev'] = best_params[1]
-            st.success(f"最佳參數: BB週期={best_params[0]}, 標準差倍數={best_params[1]}")
-        
-        # 使用最佳參數執行回測
-        OrderRecord = back_test_bb_strategy(
-            OrderRecord, KBar_df,
-            MoveStopLoss, 
-            strategy_params['BBPeriod'], 
-            strategy_params['NumStdDev'], 
-            Order_Quantity
-        )
-    
-    elif choice_strategy == 'MACD策略':
-        # 計算MACD
-        KBar_df = Calculate_MACD(KBar_df, 
-                                fast_period=strategy_params['FastPeriod'], 
-                                slow_period=strategy_params['SlowPeriod'], 
-                                signal_period=strategy_params['SignalPeriod'])
-        
-        if optimize_params:
-            # 執行最佳化參數搜索
-            best_params = optimize_macd_strategy(
-                KBar_df, 
-                strategy_params['optimize_FastPeriod'],
-                strategy_params['optimize_SlowPeriod'],
-                strategy_params['optimize_SignalPeriod'],
-                max_iterations=max_optimization_iterations
-            )
-            strategy_params['FastPeriod'] = best_params[0]
-            strategy_params['SlowPeriod'] = best_params[1]
-            strategy_params['SignalPeriod'] = best_params[2]
-            st.success(f"最佳參數: 快線={best_params[0]}, 慢線={best_params[1]}, 訊號線={best_params[2]}")
-        
-        # 使用最佳參數執行回測
-        OrderRecord = back_test_macd_strategy(
-            OrderRecord, KBar_df,
-            MoveStopLoss, 
-            strategy_params['FastPeriod'], 
-            strategy_params['SlowPeriod'], 
-            strategy_params['SignalPeriod'], 
-            Order_Quantity
-        )
-    
-    elif choice_strategy == 'ATR波動率策略':
-        # 計算ATR
-        KBar_df['ATR'] = Calculate_ATR(KBar_df, period=strategy_params['ATRPeriod'])
-        
-        if optimize_params:
-            # 執行最佳化參數搜索
-            best_params = optimize_atr_strategy(
-                KBar_df, 
-                strategy_params['optimize_ATRPeriod'],
-                strategy_params['optimize_ATRMultiplier'],
-                max_iterations=max_optimization_iterations
-            )
-            strategy_params['ATRPeriod'] = best_params[0]
-            strategy_params['ATRMultiplier'] = best_params[1]
-            st.success(f"最佳參數: ATR週期={best_params[0]}, ATR倍數={best_params[1]}")
-        
-        # 使用最佳參數執行回測
-        OrderRecord = back_test_atr_strategy(
-            OrderRecord, KBar_df,
-            MoveStopLoss, 
-            strategy_params['ATRPeriod'], 
-            strategy_params['ATRMultiplier'], 
-            Order_Quantity
-        )
-    
-    elif choice_strategy == 'KD隨機指標策略':
-        # 計算KD
-        KBar_df['K'], KBar_df['D'] = Calculate_KD(KBar_df, 
-                                                k_period=strategy_params['KPeriod'], 
-                                                d_period=strategy_params['DPeriod'])
-        
-        if optimize_params:
-            # 執行最佳化參數搜索
-            best_params = optimize_kd_strategy(
-                KBar_df, 
-                strategy_params['optimize_KPeriod'],
-                strategy_params['optimize_DPeriod'],
-                strategy_params['optimize_OverSold'],
-                strategy_params['optimize_OverBought'],
-                max_iterations=max_optimization_iterations
-            )
-            strategy_params['KPeriod'] = best_params[0]
-            strategy_params['DPeriod'] = best_params[1]
-            strategy_params['OverSold'] = best_params[2]
-            strategy_params['OverBought'] = best_params[3]
-            st.success(f"最佳參數: K={best_params[0]}, D={best_params[1]}, 超賣={best_params[2]}, 超買={best_params[3]}")
-        
-        # 使用最佳參數執行回測
-        OrderRecord = back_test_kd_strategy(
-            OrderRecord, KBar_df,
-            MoveStopLoss, 
-            strategy_params['KPeriod'], 
-            strategy_params['DPeriod'], 
-            strategy_params['OverSold'], 
-            strategy_params['OverBought'], 
-            Order_Quantity
-        )
-    
-    elif choice_strategy == '多策略組合':
-        # 多策略組合回測
-        OrderRecord = back_test_multi_strategy(
-            OrderRecord, KBar_df,
-            MoveStopLoss, 
-            Order_Quantity,
-            strategy_params
-        )
-    
-    # 顯示交易紀錄
-    st.subheader("交易紀錄")
-    trade_records = OrderRecord.GetTradeRecord()
-    if trade_records:
-        trade_df = pd.DataFrame(trade_records, 
-                               columns=['方向', '商品', '進場時間', '進場價格', '數量', '出場時間', '出場價格', '損益'])
-        st.dataframe(trade_df)
-    else:
-        st.warning("沒有交易紀錄")
-    
-    # 繪製策略專屬圖表
-    if choice_strategy == '移動平均線策略':
-        ChartOrder_MA(KBar_df, trade_records)
-    elif choice_strategy == 'RSI逆勢策略':
-        ChartOrder_RSI(KBar_df, trade_records)
-    elif choice_strategy == '布林通道策略':
-        ChartOrder_BB(KBar_df, trade_records)
-    elif choice_strategy == 'MACD策略':
-        ChartOrder_MACD(KBar_df, trade_records)
-    elif choice_strategy == 'ATR波動率策略':
-        ChartOrder_ATR(KBar_df, trade_records)
-    elif choice_strategy == 'KD隨機指標策略':
-        ChartOrder_KD(KBar_df, trade_records)
-    elif choice_strategy == '多策略組合':
-        st.write("多策略組合不提供專屬圖表")
-    
-    # 計算並顯示績效指標
-    # 確保 OrderRecord 已初始化且有交易記錄
-    if hasattr(OrderRecord, 'Profit') and len(OrderRecord.Profit) > 0:
-        # 使用統一的績效計算函數
-        results = calculate_performance(choice, OrderRecord)
-        (交易總盈虧, 平均每次盈虧, 平均投資報酬率, 
-         平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 
-         最大連續虧損, 最大盈虧回落_MDD, 報酬風險比) = results
-        
-        # 顯示績效
-        data = {
-            "項目": ["交易總盈虧(元)", "平均每次盈虧(元)", "平均投資報酬率", "平均獲利(只看獲利的)(元)", "平均虧損(只看虧損的)(元)", "勝率", "最大連續虧損(元)", "最大盈虧回落(MDD)(元)", "報酬風險比(交易總盈虧/最大盈虧回落(MDD))"],
-            "數值": [交易總盈虧, 平均每次盈虧, 平均投資報酬率, 平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 最大連續虧損, 最大盈虧回落_MDD, 報酬風險比]
-        }
-        df = pd.DataFrame(data)
-        st.write(df)
-        
-        # 繪製累計盈虧圖
-        if choice in contract_multipliers:
-            # 根據商品類型選擇繪圖參數
-            if "台積電" in choice or "英業達" in choice or "堤維西" in choice:
-                OrderRecord.GeneratorProfitChart(choice='stock', StrategyName='MA')
-            elif "大台指" in choice:
-                OrderRecord.GeneratorProfitChart(choice='future1', StrategyName='MA')
-            elif "小台指" in choice:
-                OrderRecord.GeneratorProfitChart(choice='future2', StrategyName='MA')
-            else:
-                # 默認股票類型
-                OrderRecord.GeneratorProfitChart(choice='stock', StrategyName='MA')
-        else:
-            st.warning("無法識別的商品類型")
-            
-        # 繪製累計投資報酬率圖
-        OrderRecord.GeneratorProfit_rateChart(StrategyName='MA')
-    else:
-        st.warning("沒有交易記錄(已經了結之交易) !")
-
 #%% 新增回测函数和绩效分析
 # 移动平均线策略回测
 def back_test_ma_strategy(record_obj, KBar_df, MoveStopLoss, LongMAPeriod, ShortMAPeriod, Order_Quantity):
@@ -2324,6 +1971,359 @@ def ChartOrder_RSI(KBar_df, TR):
     st.plotly_chart(fig, use_container_width=True)
 
 # 其他策略的专属图表函数类似实现...
+#%%
+####### (6) 程式交易 ####### 
+st.subheader("程式交易:")
+
+# 在選擇金融商品後初始化 OrderRecord
+OrderRecord = Record()
+
+# 新增策略選擇
+choices_strategies = [
+    '移動平均線策略',
+    'RSI逆勢策略',
+    '布林通道策略',
+    'MACD策略',
+    'ATR波動率策略',
+    'KD隨機指標策略',
+    '多策略組合'
+]
+choice_strategy = st.selectbox('選擇交易策略', choices_strategies, index=0)
+
+# 最佳化參數搜索開關
+optimize_params = st.checkbox('啟用最佳化參數搜索', value=False)
+
+# 通用參數設定
+with st.expander("通用參數設定"):
+    MoveStopLoss = st.slider('停損點數(股票:每股; 期貨:指數點數)', 1, 100, 30)
+    Order_Quantity = st.slider('交易數量(股票:張; 期貨:口數)', 1, 100, 1)
+    max_optimization_iterations = st.slider('最佳化最大迭代次數', 10, 500, 50) if optimize_params else 0
+
+# 策略專屬參數設定
+strategy_params = {}
+if choice_strategy == '移動平均線策略':
+    with st.expander("移動平均線策略參數"):
+        strategy_params['LongMAPeriod'] = st.slider('長移動平均線週期', 5, 100, 20)
+        strategy_params['ShortMAPeriod'] = st.slider('短移動平均線週期', 1, 50, 5)
+        
+        if optimize_params:
+            strategy_params['optimize_LongMAPeriod'] = st.slider('長MA最佳化範圍', 10, 100, (15, 50))
+            strategy_params['optimize_ShortMAPeriod'] = st.slider('短MA最佳化範圍', 1, 30, (3, 15))
+
+elif choice_strategy == 'RSI逆勢策略':
+    with st.expander("RSI策略參數"):
+        strategy_params['RSIPeriod'] = st.slider('RSI週期', 5, 30, 14)
+        strategy_params['OverSold'] = st.slider('超賣閾值', 1, 40, 30)
+        strategy_params['OverBought'] = st.slider('超買閾值', 60, 100, 70)
+        
+        if optimize_params:
+            strategy_params['optimize_RSIPeriod'] = st.slider('RSI週期最佳化範圍', 5, 30, (10, 20))
+            strategy_params['optimize_OverSold'] = st.slider('超賣閾值最佳化範圍', 20, 40, (25, 35))
+            strategy_params['optimize_OverBought'] = st.slider('超買閾值最佳化範圍', 65, 85, (70, 80))
+
+elif choice_strategy == '布林通道策略':
+    with st.expander("布林通道策略參數"):
+        strategy_params['BBPeriod'] = st.slider('布林通道週期', 10, 50, 20)
+        strategy_params['NumStdDev'] = st.slider('標準差倍數', 1.0, 3.0, 2.0)
+        
+        if optimize_params:
+            strategy_params['optimize_BBPeriod'] = st.slider('BB週期最佳化範圍', 10, 50, (15, 30))
+            strategy_params['optimize_NumStdDev'] = st.slider('標準差倍數最佳化範圍', 1.5, 2.5, (1.8, 2.2))
+
+elif choice_strategy == 'MACD策略':
+    with st.expander("MACD策略參數"):
+        strategy_params['FastPeriod'] = st.slider('快速線週期', 5, 20, 12)
+        strategy_params['SlowPeriod'] = st.slider('慢速線週期', 15, 50, 26)
+        strategy_params['SignalPeriod'] = st.slider('訊號線週期', 5, 20, 9)
+        
+        if optimize_params:
+            strategy_params['optimize_FastPeriod'] = st.slider('快速線最佳化範圍', 8, 20, (10, 15))
+            strategy_params['optimize_SlowPeriod'] = st.slider('慢速線最佳化範圍', 20, 40, (22, 30))
+            strategy_params['optimize_SignalPeriod'] = st.slider('訊號線最佳化範圍', 5, 15, (7, 12))
+
+elif choice_strategy == 'ATR波動率策略':
+    with st.expander("ATR策略參數"):
+        strategy_params['ATRPeriod'] = st.slider('ATR週期', 5, 30, 14)
+        strategy_params['ATRMultiplier'] = st.slider('ATR倍數', 1.0, 5.0, 2.0)
+        
+        if optimize_params:
+            strategy_params['optimize_ATRPeriod'] = st.slider('ATR週期最佳化範圍', 10, 25, (12, 18))
+            strategy_params['optimize_ATRMultiplier'] = st.slider('ATR倍數最佳化範圍', 1.5, 3.5, (2.0, 3.0))
+
+elif choice_strategy == 'KD隨機指標策略':
+    with st.expander("KD策略參數"):
+        strategy_params['KPeriod'] = st.slider('K值週期', 5, 20, 9)
+        strategy_params['DPeriod'] = st.slider('D值週期', 3, 10, 3)
+        strategy_params['OverSold'] = st.slider('超賣閾值', 10, 30, 20)
+        strategy_params['OverBought'] = st.slider('超買閾值', 70, 90, 80)
+        
+        if optimize_params:
+            strategy_params['optimize_KPeriod'] = st.slider('K值週期最佳化範圍', 5, 20, (7, 14))
+            strategy_params['optimize_DPeriod'] = st.slider('D值週期最佳化範圍', 3, 10, (3, 6))
+            strategy_params['optimize_OverSold'] = st.slider('超賣閾值最佳化範圍', 20, 30, (20, 25))
+            strategy_params['optimize_OverBought'] = st.slider('超買閾值最佳化範圍', 70, 85, (75, 80))
+
+elif choice_strategy == '多策略組合':
+    with st.expander("組合策略參數"):
+        strategy_params['Weight_MA'] = st.slider('MA策略權重', 0.0, 1.0, 0.4)
+        strategy_params['Weight_RSI'] = st.slider('RSI策略權重', 0.0, 1.0, 0.3)
+        strategy_params['Weight_BB'] = st.slider('BB策略權重', 0.0, 1.0, 0.3)
+
+# 回测按钮
+if st.button('開始回測'):
+    # 建立部位管理物件
+    # 判斷是否為期貨商品
+    is_future = False
+    for key in product_info:
+        if "期貨" in key:
+            is_future = True
+            break
+    
+    if is_future:  # 期貨商品
+        OrderRecord = Record(spread=3.628e-4, tax=0.00002, commission=0.0002, isFuture=True)
+    else:  # 股票商品
+        OrderRecord = Record(spread=3.628e-4, tax=0.003, commission=0.001425, isFuture=False)
+        
+    # 根據選擇的策略執行回測
+    if choice_strategy == '移動平均線策略':
+        if optimize_params:
+            # 執行最佳化參數搜索
+            best_params = optimize_ma_strategy(
+                KBar_df, 
+                strategy_params['optimize_LongMAPeriod'],
+                strategy_params['optimize_ShortMAPeriod'],
+                max_iterations=max_optimization_iterations
+            )
+            strategy_params['LongMAPeriod'] = best_params[0]
+            strategy_params['ShortMAPeriod'] = best_params[1]
+            st.success(f"最佳參數: 長MA={best_params[0]}, 短MA={best_params[1]}")
+        
+        # 使用最佳參數執行回測
+        OrderRecord = back_test_ma_strategy(
+            OrderRecord, KBar_df,
+            MoveStopLoss, 
+            strategy_params['LongMAPeriod'], 
+            strategy_params['ShortMAPeriod'], 
+            Order_Quantity
+        )
+        
+    elif choice_strategy == 'RSI逆勢策略':
+        # 計算RSI
+        KBar_df['RSI'] = Calculate_RSI(KBar_df, period=strategy_params['RSIPeriod'])
+        
+        if optimize_params:
+            # 執行最佳化參數搜索
+            best_params = optimize_rsi_strategy(
+                KBar_df, 
+                strategy_params['optimize_RSIPeriod'],
+                strategy_params['optimize_OverSold'],
+                strategy_params['optimize_OverBought'],
+                max_iterations=max_optimization_iterations
+            )
+            strategy_params['RSIPeriod'] = best_params[0]
+            strategy_params['OverSold'] = best_params[1]
+            strategy_params['OverBought'] = best_params[2]
+            st.success(f"最佳參數: RSI週期={best_params[0]}, 超賣={best_params[1]}, 超買={best_params[2]}")
+        
+        # 使用最佳參數執行回測
+        OrderRecord = back_test_rsi_strategy(
+            OrderRecord, KBar_df,
+            MoveStopLoss, 
+            strategy_params['RSIPeriod'], 
+            strategy_params['OverSold'], 
+            strategy_params['OverBought'], 
+            Order_Quantity
+        )
+    
+    elif choice_strategy == '布林通道策略':
+        # 計算布林通道
+        KBar_df = Calculate_Bollinger_Bands(KBar_df, 
+                                           period=strategy_params['BBPeriod'], 
+                                           num_std_dev=strategy_params['NumStdDev'])
+        
+        if optimize_params:
+            # 執行最佳化參數搜索
+            best_params = optimize_bb_strategy(
+                KBar_df, 
+                strategy_params['optimize_BBPeriod'],
+                strategy_params['optimize_NumStdDev'],
+                max_iterations=max_optimization_iterations
+            )
+            strategy_params['BBPeriod'] = best_params[0]
+            strategy_params['NumStdDev'] = best_params[1]
+            st.success(f"最佳參數: BB週期={best_params[0]}, 標準差倍數={best_params[1]}")
+        
+        # 使用最佳參數執行回測
+        OrderRecord = back_test_bb_strategy(
+            OrderRecord, KBar_df,
+            MoveStopLoss, 
+            strategy_params['BBPeriod'], 
+            strategy_params['NumStdDev'], 
+            Order_Quantity
+        )
+    
+    elif choice_strategy == 'MACD策略':
+        # 計算MACD
+        KBar_df = Calculate_MACD(KBar_df, 
+                                fast_period=strategy_params['FastPeriod'], 
+                                slow_period=strategy_params['SlowPeriod'], 
+                                signal_period=strategy_params['SignalPeriod'])
+        
+        if optimize_params:
+            # 執行最佳化參數搜索
+            best_params = optimize_macd_strategy(
+                KBar_df, 
+                strategy_params['optimize_FastPeriod'],
+                strategy_params['optimize_SlowPeriod'],
+                strategy_params['optimize_SignalPeriod'],
+                max_iterations=max_optimization_iterations
+            )
+            strategy_params['FastPeriod'] = best_params[0]
+            strategy_params['SlowPeriod'] = best_params[1]
+            strategy_params['SignalPeriod'] = best_params[2]
+            st.success(f"最佳參數: 快線={best_params[0]}, 慢線={best_params[1]}, 訊號線={best_params[2]}")
+        
+        # 使用最佳參數執行回測
+        OrderRecord = back_test_macd_strategy(
+            OrderRecord, KBar_df,
+            MoveStopLoss, 
+            strategy_params['FastPeriod'], 
+            strategy_params['SlowPeriod'], 
+            strategy_params['SignalPeriod'], 
+            Order_Quantity
+        )
+    
+    elif choice_strategy == 'ATR波動率策略':
+        # 計算ATR
+        KBar_df['ATR'] = Calculate_ATR(KBar_df, period=strategy_params['ATRPeriod'])
+        
+        if optimize_params:
+            # 執行最佳化參數搜索
+            best_params = optimize_atr_strategy(
+                KBar_df, 
+                strategy_params['optimize_ATRPeriod'],
+                strategy_params['optimize_ATRMultiplier'],
+                max_iterations=max_optimization_iterations
+            )
+            strategy_params['ATRPeriod'] = best_params[0]
+            strategy_params['ATRMultiplier'] = best_params[1]
+            st.success(f"最佳參數: ATR週期={best_params[0]}, ATR倍數={best_params[1]}")
+        
+        # 使用最佳參數執行回測
+        OrderRecord = back_test_atr_strategy(
+            OrderRecord, KBar_df,
+            MoveStopLoss, 
+            strategy_params['ATRPeriod'], 
+            strategy_params['ATRMultiplier'], 
+            Order_Quantity
+        )
+    
+    elif choice_strategy == 'KD隨機指標策略':
+        # 計算KD
+        KBar_df['K'], KBar_df['D'] = Calculate_KD(KBar_df, 
+                                                k_period=strategy_params['KPeriod'], 
+                                                d_period=strategy_params['DPeriod'])
+        
+        if optimize_params:
+            # 執行最佳化參數搜索
+            best_params = optimize_kd_strategy(
+                KBar_df, 
+                strategy_params['optimize_KPeriod'],
+                strategy_params['optimize_DPeriod'],
+                strategy_params['optimize_OverSold'],
+                strategy_params['optimize_OverBought'],
+                max_iterations=max_optimization_iterations
+            )
+            strategy_params['KPeriod'] = best_params[0]
+            strategy_params['DPeriod'] = best_params[1]
+            strategy_params['OverSold'] = best_params[2]
+            strategy_params['OverBought'] = best_params[3]
+            st.success(f"最佳參數: K={best_params[0]}, D={best_params[1]}, 超賣={best_params[2]}, 超買={best_params[3]}")
+        
+        # 使用最佳參數執行回測
+        OrderRecord = back_test_kd_strategy(
+            OrderRecord, KBar_df,
+            MoveStopLoss, 
+            strategy_params['KPeriod'], 
+            strategy_params['DPeriod'], 
+            strategy_params['OverSold'], 
+            strategy_params['OverBought'], 
+            Order_Quantity
+        )
+    
+    elif choice_strategy == '多策略組合':
+        # 多策略組合回測
+        OrderRecord = back_test_multi_strategy(
+            OrderRecord, KBar_df,
+            MoveStopLoss, 
+            Order_Quantity,
+            strategy_params
+        )
+    
+    # 顯示交易紀錄
+    st.subheader("交易紀錄")
+    trade_records = OrderRecord.GetTradeRecord()
+    if trade_records:
+        trade_df = pd.DataFrame(trade_records, 
+                               columns=['方向', '商品', '進場時間', '進場價格', '數量', '出場時間', '出場價格', '損益'])
+        st.dataframe(trade_df)
+    else:
+        st.warning("沒有交易紀錄")
+    
+    # 繪製策略專屬圖表
+    if choice_strategy == '移動平均線策略':
+        ChartOrder_MA(KBar_df, trade_records)
+    elif choice_strategy == 'RSI逆勢策略':
+        ChartOrder_RSI(KBar_df, trade_records)
+    elif choice_strategy == '布林通道策略':
+        ChartOrder_BB(KBar_df, trade_records)
+    elif choice_strategy == 'MACD策略':
+        ChartOrder_MACD(KBar_df, trade_records)
+    elif choice_strategy == 'ATR波動率策略':
+        ChartOrder_ATR(KBar_df, trade_records)
+    elif choice_strategy == 'KD隨機指標策略':
+        ChartOrder_KD(KBar_df, trade_records)
+    elif choice_strategy == '多策略組合':
+        st.write("多策略組合不提供專屬圖表")
+    
+    # 計算並顯示績效指標
+    # 確保 OrderRecord 已初始化且有交易記錄
+    if hasattr(OrderRecord, 'Profit') and len(OrderRecord.Profit) > 0:
+        # 使用統一的績效計算函數
+        results = calculate_performance(choice, OrderRecord)
+        (交易總盈虧, 平均每次盈虧, 平均投資報酬率, 
+         平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 
+         最大連續虧損, 最大盈虧回落_MDD, 報酬風險比) = results
+        
+        # 顯示績效
+        data = {
+            "項目": ["交易總盈虧(元)", "平均每次盈虧(元)", "平均投資報酬率", "平均獲利(只看獲利的)(元)", "平均虧損(只看虧損的)(元)", "勝率", "最大連續虧損(元)", "最大盈虧回落(MDD)(元)", "報酬風險比(交易總盈虧/最大盈虧回落(MDD))"],
+            "數值": [交易總盈虧, 平均每次盈虧, 平均投資報酬率, 平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 最大連續虧損, 最大盈虧回落_MDD, 報酬風險比]
+        }
+        df = pd.DataFrame(data)
+        st.write(df)
+        
+        # 繪製累計盈虧圖
+        if choice in contract_multipliers:
+            # 根據商品類型選擇繪圖參數
+            if "台積電" in choice or "英業達" in choice or "堤維西" in choice:
+                OrderRecord.GeneratorProfitChart(choice='stock', StrategyName='MA')
+            elif "大台指" in choice:
+                OrderRecord.GeneratorProfitChart(choice='future1', StrategyName='MA')
+            elif "小台指" in choice:
+                OrderRecord.GeneratorProfitChart(choice='future2', StrategyName='MA')
+            else:
+                # 默認股票類型
+                OrderRecord.GeneratorProfitChart(choice='stock', StrategyName='MA')
+        else:
+            st.warning("無法識別的商品類型")
+            
+        # 繪製累計投資報酬率圖
+        OrderRecord.GeneratorProfit_rateChart(StrategyName='MA')
+    else:
+        st.warning("沒有交易記錄(已經了結之交易) !")
+
+
 
 # 定義各類商品的合約乘數
 contract_multipliers = {
