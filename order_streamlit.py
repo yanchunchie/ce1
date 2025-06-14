@@ -10,7 +10,7 @@ import streamlit as st
 
 # 下單部位管理物件
 class Record():
-    def __init__(self ):   ## 建構子
+    def __init__(self, spread=0.0, tax=0.0, commission=0.0, isFuture=False):   ## 修改建構子
         # 儲存績效
         self.Profit=[]
         self.Profit_rate=[]
@@ -19,6 +19,12 @@ class Record():
         self.OpenInterest=[]
         # 交易紀錄總計
         self.TradeRecord=[]
+        
+        # 新增交易成本參數
+        self.spread = spread      # 點差
+        self.tax = tax            # 稅
+        self.commission = commission  # 手續費
+        self.isFuture = isFuture   # 是否為期貨商品
     # 進場紀錄
     def Order(self, BS,Product,OrderTime,OrderPrice,OrderQty):
         if BS=='B' or BS=='Buy':
