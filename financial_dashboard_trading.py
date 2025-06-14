@@ -888,13 +888,13 @@ def back_test_multi_strategy(record_obj, KBar_df, MoveStopLoss, Order_Quantity, 
         # 进场: 如果无未平仓部位 
         if record_obj.GetOpenInterest() == 0:
             # 多单进場: 综合信号达到阈值
-            if buy_signals > 0.7:  # 70%权重支持买入
+            if buy_signals > params['Buy_Threshold']:  
                 record_obj.Order('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
                 OrderPrice = KBar_df['open'][i+1]
                 StopLossPoint = OrderPrice - MoveStopLoss
                 continue
             # 空单进場: 综合信号达到阈值
-            if sell_signals > 0.7:  # 70%权重支持卖出
+            if sell_signals > params['Sell_Threshold']:  
                 record_obj.Order('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
                 OrderPrice = KBar_df['open'][i+1]
                 StopLossPoint = OrderPrice + MoveStopLoss
@@ -2799,8 +2799,13 @@ elif choice_strategy == 'KD隨機指標策略':
             strategy_params['optimize_OverSold'] = st.slider('超賣閾值最佳化範圍', 20, 30, (20, 25))
             strategy_params['optimize_OverBought'] = st.slider('超買閾值最佳化範圍', 70, 85, (75, 80))
 
+# 在策略選擇部分
 elif choice_strategy == '多策略組合':
     with st.expander("組合策略參數"):
+        # 新增閾值設定
+        strategy_params['Buy_Threshold'] = st.slider('買入信號閾值', 0.0, 1.0, 0.4)
+        strategy_params['Sell_Threshold'] = st.slider('賣出信號閾值', 0.0, 1.0, 0.4)
+        
         # 權重設定
         strategy_params['Weight_MA'] = st.slider('MA策略權重', 0.0, 1.0, 0.4)
         strategy_params['Weight_RSI'] = st.slider('RSI策略權重', 0.0, 1.0, 0.3)
@@ -2818,7 +2823,6 @@ elif choice_strategy == '多策略組合':
         # 布林通道策略參數
         strategy_params['BBPeriod'] = st.slider('布林通道週期', 10, 50, 20)
         strategy_params['NumStdDev'] = st.slider('標準差倍數', 1.0, 3.0, 2.0)
-
 # 回测按钮
 if st.button('開始回測'):
     # 建立部位管理物件
