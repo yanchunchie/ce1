@@ -2801,9 +2801,23 @@ elif choice_strategy == 'KD隨機指標策略':
 
 elif choice_strategy == '多策略組合':
     with st.expander("組合策略參數"):
+        # 權重設定
         strategy_params['Weight_MA'] = st.slider('MA策略權重', 0.0, 1.0, 0.4)
         strategy_params['Weight_RSI'] = st.slider('RSI策略權重', 0.0, 1.0, 0.3)
         strategy_params['Weight_BB'] = st.slider('BB策略權重', 0.0, 1.0, 0.3)
+        
+        # MA策略參數
+        strategy_params['LongMAPeriod'] = st.slider('長移動平均線週期', 5, 100, 20)
+        strategy_params['ShortMAPeriod'] = st.slider('短移動平均線週期', 1, 50, 5)
+        
+        # RSI策略參數
+        strategy_params['RSIPeriod'] = st.slider('RSI週期', 5, 30, 14)
+        strategy_params['OverSold'] = st.slider('超賣閾值', 1, 40, 30)
+        strategy_params['OverBought'] = st.slider('超買閾值', 60, 100, 70)
+        
+        # 布林通道策略參數
+        strategy_params['BBPeriod'] = st.slider('布林通道週期', 10, 50, 20)
+        strategy_params['NumStdDev'] = st.slider('標準差倍數', 1.0, 3.0, 2.0)
 
 # 回测按钮
 if st.button('開始回測'):
