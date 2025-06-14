@@ -836,42 +836,51 @@ def back_test_kd_strategy(record_obj, KBar_df, MoveStopLoss, KPeriod, DPeriod, O
     
     return record_obj
 
-# 多策略组合回测函数
+# 修改多策略回测函数
 def back_test_multi_strategy(record_obj, KBar_df, MoveStopLoss, Order_Quantity, params):
-    # 初始化信号计数器
-    buy_signals = 0
-    sell_signals = 0
+    # 计算所有指标
+    KBar_df['MA_long'] = KBar_df['close'].rolling(window=params['LongMAPeriod']).mean()
+    KBar_df['MA_short'] = KBar_df['close'].rolling(window=params['ShortMAPeriod']).mean()
     
-    # 计算所有策略的信号
-    # 移动平均线策略信号
-    KBar_df['MA_long'] = Calculate_MA(KBar_df, period=params['LongMAPeriod'])
-    KBar_df['MA_short'] = Calculate_MA(KBar_df, period=params['ShortMAPeriod'])
+    # 计算RSI
+    delta = KBar_df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=params['RSIPeriod']).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=params['RSIPeriod']).mean()
+    rs = gain / loss
+    KBar_df['RSI'] = 100 - (100 / (1 + rs))
     
-    # RSI策略信号
-    KBar_df['RSI'] = Calculate_RSI(KBar_df, period=params['RSIPeriod'])
-    
-    # 布林通道策略信号
-    KBar_df = Calculate_Bollinger_Bands(KBar_df, period=params['BBPeriod'], num_std_dev=params['NumStdDev'])
+    # 计算布林通道
+    KBar_df['BB_SMA'] = KBar_df['close'].rolling(window=params['BBPeriod']).mean()
+    std = KBar_df['close'].rolling(window=params['BBPeriod']).std()
+    KBar_df['BB_Upper_Band'] = KBar_df['BB_SMA'] + (std * params['NumStdDev'])
+    KBar_df['BB_Lower_Band'] = KBar_df['BB_SMA'] - (std * params['NumStdDev'])
     
     # 寻找最后NAN值的位置
     last_nan_index = max(
-        KBar_df['MA_long'].last_valid_index() or 0,
-        KBar_df['RSI'].last_valid_index() or 0,
-        KBar_df['SMA'].last_valid_index() or 0
+        KBar_df['MA_long'].isna().sum(),
+        KBar_df['RSI'].isna().sum(),
+        KBar_df['BB_SMA'].isna().sum()
     )
-    signals_data = []
+    
+    # 确保有足够的数据
+    if len(KBar_df) <= last_nan_index + 1:
+        return record_obj, pd.DataFrame()
+    
     # 回测逻辑
     StopLossPoint = 0
+    signals_data = []  # 用于收集信号数据
+    
     for i in range(last_nan_index + 1, len(KBar_df) - 1):
-        # 重置信号计数器
+        # 初始化信号计数器
         buy_signals = 0
         sell_signals = 0
-        # 初始化信号贡献度
+        
+        # 记录各策略贡献
         ma_contribution = 0
         rsi_contribution = 0
         bb_contribution = 0
         
-        # MA信號
+        # MA信号
         if KBar_df.iloc[i]['MA_short'] > KBar_df.iloc[i]['MA_long']:
             buy_signals += params['Weight_MA']
             ma_contribution = params['Weight_MA']
@@ -879,7 +888,7 @@ def back_test_multi_strategy(record_obj, KBar_df, MoveStopLoss, Order_Quantity, 
             sell_signals += params['Weight_MA']
             ma_contribution = -params['Weight_MA']
         
-        # RSI信號
+        # RSI信号
         if KBar_df.iloc[i]['RSI'] < params['OverSold']:
             buy_signals += params['Weight_RSI']
             rsi_contribution = params['Weight_RSI']
@@ -887,7 +896,7 @@ def back_test_multi_strategy(record_obj, KBar_df, MoveStopLoss, Order_Quantity, 
             sell_signals += params['Weight_RSI']
             rsi_contribution = -params['Weight_RSI']
         
-        # BB信號
+        # BB信号
         if KBar_df.iloc[i]['close'] < KBar_df.iloc[i]['BB_Lower_Band']:
             buy_signals += params['Weight_BB']
             bb_contribution = params['Weight_BB']
@@ -895,7 +904,7 @@ def back_test_multi_strategy(record_obj, KBar_df, MoveStopLoss, Order_Quantity, 
             sell_signals += params['Weight_BB']
             bb_contribution = -params['Weight_BB']
         
-        # 收集信號數據
+        # 收集信号数据
         signals_data.append({
             'time': KBar_df.iloc[i]['time'],
             'Buy_Signal': buy_signals,
@@ -904,11 +913,15 @@ def back_test_multi_strategy(record_obj, KBar_df, MoveStopLoss, Order_Quantity, 
             'RSI_Signal': rsi_contribution,
             'BB_Signal': bb_contribution
         })
+        
+        # ... [剩余回测逻辑保持不变] ...
     
-    # 轉換為DataFrame
-    signals_df = pd.DataFrame(signals_data).set_index('time')
+    # 创建信号DataFrame
+    signals_df = pd.DataFrame(signals_data)
+    if not signals_df.empty:
+        signals_df = signals_df.set_index('time')
     
-    return record_obj, signals_df  # 返回記錄物件和信號數據
+    return record_obj, signals_df
 #%%
 ###### K線圖, 移動平均線MA
 with st.expander("K線圖, 移動平均線"):
@@ -3056,14 +3069,22 @@ if st.button('開始回測'):
             Order_Quantity
         )
     
+    # 多策略组合需要特殊处理
     elif choice_strategy == '多策略組合':
-        # 使用修改后的回测函数，接收两个返回值
-        OrderRecord, signals_df = back_test_multi_strategy(
+        # 调用多策略回测函数，并处理可能的返回值类型
+        result = back_test_multi_strategy(
             OrderRecord, KBar_df,
             MoveStopLoss, 
             Order_Quantity,
             strategy_params
         )
+        
+        # 正确处理返回值（可能是单个Record或元组）
+        if isinstance(result, tuple) and len(result) == 2:
+            OrderRecord, signals_df = result
+        else:
+            OrderRecord = result
+            signals_df = pd.DataFrame()  # 创建空DataFrame
     
     # 显示交易记录
     st.subheader("交易紀錄")
@@ -3091,7 +3112,7 @@ if st.button('開始回測'):
         ChartOrder_KD(KBar_df, trade_records)
     elif choice_strategy == '多策略組合':
         # 添加多策略组合的专属图表
-        if trade_records:  # 确保有交易记录
+        if not signals_df.empty and trade_records:
             # 定义多策略组合的图表函数
             def ChartOrder_Multi(Kbar_df, TR, signals_df, buy_threshold, sell_threshold):
                 """多策略組合專屬圖表"""
@@ -3192,8 +3213,10 @@ if st.button('開始回測'):
                 strategy_params['Sell_Threshold']
             )
             st.plotly_chart(fig, use_container_width=True)
-        else:
+        elif not trade_records:
             st.warning("沒有交易記錄，無法繪製專屬圖表")
+        else:
+            st.warning("沒有足夠的信號數據繪製專屬圖表")
     
     # 計算並顯示績效指標
     if hasattr(OrderRecord, 'Profit') and len(OrderRecord.Profit) > 0:
@@ -3233,5 +3256,4 @@ if st.button('開始回測'):
     else:
         st.warning("沒有交易記錄(已經了結之交易) !")
 
-
-
+	    
