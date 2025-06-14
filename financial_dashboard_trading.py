@@ -4,7 +4,8 @@
 
 @author: 
 """
-
+import random
+from itertools import product  # 添加這行
 # 載入必要模組
 import os
 #import haohaninfo
@@ -1733,7 +1734,272 @@ def optimize_ma_strategy(KBar_df, long_range, short_range, max_iterations=50):
     
     return best_params
 
-# 其他策略的最佳化函数类似实现...
+# RSI策略最佳化參數搜索
+def optimize_rsi_strategy(KBar_df, rsi_range, over_sold_range, over_bought_range, max_iterations=50):
+    best_performance = -float('inf')
+    best_params = (0, 0, 0)
+    
+    # 生成參數組合
+    rsi_options = np.linspace(rsi_range[0], rsi_range[1], 10, dtype=int)
+    os_options = np.linspace(over_sold_range[0], over_sold_range[1], 10, dtype=int)
+    ob_options = np.linspace(over_bought_range[0], over_bought_range[1], 10, dtype=int)
+    param_combinations = list(product(rsi_options, os_options, ob_options))
+    
+    # 隨機抽樣減少計算量
+    if len(param_combinations) > max_iterations:
+        param_combinations = random.sample(param_combinations, max_iterations)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i, (rsi_period, over_sold, over_bought) in enumerate(param_combinations):
+        if over_sold >= over_bought:
+            continue
+            
+        # 建立臨時記錄物件
+        temp_record = Record(isFuture=False)
+        
+        # 執行回測
+        temp_record = back_test_rsi_strategy(
+            temp_record, KBar_df.copy(),
+            MoveStopLoss=30,
+            RSIPeriod=rsi_period,
+            OverSold=over_sold,
+            OverBought=over_bought,
+            Order_Quantity=1
+        )
+        
+        # 計算績效指標
+        if len(temp_record.Profit) > 0:
+            total_profit = sum(temp_record.Profit)
+            win_rate = len([p for p in temp_record.Profit if p > 0]) / len(temp_record.Profit)
+            performance = total_profit * win_rate
+            
+            if performance > best_performance:
+                best_performance = performance
+                best_params = (rsi_period, over_sold, over_bought)
+        
+        # 更新進度條
+        progress = (i + 1) / len(param_combinations)
+        progress_bar.progress(progress)
+        status_text.text(f"測試參數組合: {i+1}/{len(param_combinations)} | 當前最佳: {best_params} 績效: {best_performance:.2f}")
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    return best_params
+
+# 布林通道策略最佳化參數搜索
+def optimize_bb_strategy(KBar_df, bb_range, std_range, max_iterations=50):
+    best_performance = -float('inf')
+    best_params = (0, 0)
+    
+    # 生成參數組合
+    bb_options = np.linspace(bb_range[0], bb_range[1], 10, dtype=int)
+    std_options = np.linspace(std_range[0], std_range[1], 10)
+    param_combinations = list(product(bb_options, std_options))
+    
+    # 隨機抽樣減少計算量
+    if len(param_combinations) > max_iterations:
+        param_combinations = random.sample(param_combinations, max_iterations)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i, (bb_period, std_dev) in enumerate(param_combinations):
+        # 建立臨時記錄物件
+        temp_record = Record(isFuture=False)
+        
+        # 執行回測
+        temp_record = back_test_bb_strategy(
+            temp_record, KBar_df.copy(),
+            MoveStopLoss=30,
+            BBPeriod=bb_period,
+            NumStdDev=std_dev,
+            Order_Quantity=1
+        )
+        
+        # 計算績效指標
+        if len(temp_record.Profit) > 0:
+            total_profit = sum(temp_record.Profit)
+            win_rate = len([p for p in temp_record.Profit if p > 0]) / len(temp_record.Profit)
+            performance = total_profit * win_rate
+            
+            if performance > best_performance:
+                best_performance = performance
+                best_params = (bb_period, std_dev)
+        
+        # 更新進度條
+        progress = (i + 1) / len(param_combinations)
+        progress_bar.progress(progress)
+        status_text.text(f"測試參數組合: {i+1}/{len(param_combinations)} | 當前最佳: {best_params} 績效: {best_performance:.2f}")
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    return best_params
+
+# MACD策略最佳化參數搜索
+def optimize_macd_strategy(KBar_df, fast_range, slow_range, signal_range, max_iterations=50):
+    best_performance = -float('inf')
+    best_params = (0, 0, 0)
+    
+    # 生成參數組合
+    fast_options = np.linspace(fast_range[0], fast_range[1], 10, dtype=int)
+    slow_options = np.linspace(slow_range[0], slow_range[1], 10, dtype=int)
+    signal_options = np.linspace(signal_range[0], signal_range[1], 10, dtype=int)
+    param_combinations = list(product(fast_options, slow_options, signal_options))
+    
+    # 過濾無效組合
+    param_combinations = [p for p in param_combinations if p[0] < p[1]]
+    
+    # 隨機抽樣減少計算量
+    if len(param_combinations) > max_iterations:
+        param_combinations = random.sample(param_combinations, max_iterations)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i, (fast, slow, signal) in enumerate(param_combinations):
+        # 建立臨時記錄物件
+        temp_record = Record(isFuture=False)
+        
+        # 執行回測
+        temp_record = back_test_macd_strategy(
+            temp_record, KBar_df.copy(),
+            MoveStopLoss=30,
+            FastPeriod=fast,
+            SlowPeriod=slow,
+            SignalPeriod=signal,
+            Order_Quantity=1
+        )
+        
+        # 計算績效指標
+        if len(temp_record.Profit) > 0:
+            total_profit = sum(temp_record.Profit)
+            win_rate = len([p for p in temp_record.Profit if p > 0]) / len(temp_record.Profit)
+            performance = total_profit * win_rate
+            
+            if performance > best_performance:
+                best_performance = performance
+                best_params = (fast, slow, signal)
+        
+        # 更新進度條
+        progress = (i + 1) / len(param_combinations)
+        progress_bar.progress(progress)
+        status_text.text(f"測試參數組合: {i+1}/{len(param_combinations)} | 當前最佳: {best_params} 績效: {best_performance:.2f}")
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    return best_params
+
+# ATR策略最佳化參數搜索
+def optimize_atr_strategy(KBar_df, atr_range, multiplier_range, max_iterations=50):
+    best_performance = -float('inf')
+    best_params = (0, 0)
+    
+    # 生成參數組合
+    atr_options = np.linspace(atr_range[0], atr_range[1], 10, dtype=int)
+    multiplier_options = np.linspace(multiplier_range[0], multiplier_range[1], 10)
+    param_combinations = list(product(atr_options, multiplier_options))
+    
+    # 隨機抽樣減少計算量
+    if len(param_combinations) > max_iterations:
+        param_combinations = random.sample(param_combinations, max_iterations)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i, (atr_period, multiplier) in enumerate(param_combinations):
+        # 建立臨時記錄物件
+        temp_record = Record(isFuture=False)
+        
+        # 執行回測
+        temp_record = back_test_atr_strategy(
+            temp_record, KBar_df.copy(),
+            MoveStopLoss=30,
+            ATRPeriod=atr_period,
+            ATRMultiplier=multiplier,
+            Order_Quantity=1
+        )
+        
+        # 計算績效指標
+        if len(temp_record.Profit) > 0:
+            total_profit = sum(temp_record.Profit)
+            win_rate = len([p for p in temp_record.Profit if p > 0]) / len(temp_record.Profit)
+            performance = total_profit * win_rate
+            
+            if performance > best_performance:
+                best_performance = performance
+                best_params = (atr_period, multiplier)
+        
+        # 更新進度條
+        progress = (i + 1) / len(param_combinations)
+        progress_bar.progress(progress)
+        status_text.text(f"測試參數組合: {i+1}/{len(param_combinations)} | 當前最佳: {best_params} 績效: {best_performance:.2f}")
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    return best_params
+
+# KD策略最佳化參數搜索
+def optimize_kd_strategy(KBar_df, k_range, d_range, os_range, ob_range, max_iterations=50):
+    best_performance = -float('inf')
+    best_params = (0, 0, 0, 0)
+    
+    # 生成參數組合
+    k_options = np.linspace(k_range[0], k_range[1], 10, dtype=int)
+    d_options = np.linspace(d_range[0], d_range[1], 10, dtype=int)
+    os_options = np.linspace(os_range[0], os_range[1], 10, dtype=int)
+    ob_options = np.linspace(ob_range[0], ob_range[1], 10, dtype=int)
+    param_combinations = list(product(k_options, d_options, os_options, ob_options))
+    
+    # 過濾無效組合
+    param_combinations = [p for p in param_combinations if p[2] < p[3]]
+    
+    # 隨機抽樣減少計算量
+    if len(param_combinations) > max_iterations:
+        param_combinations = random.sample(param_combinations, max_iterations)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i, (k_period, d_period, over_sold, over_bought) in enumerate(param_combinations):
+        # 建立臨時記錄物件
+        temp_record = Record(isFuture=False)
+        
+        # 執行回測
+        temp_record = back_test_kd_strategy(
+            temp_record, KBar_df.copy(),
+            MoveStopLoss=30,
+            KPeriod=k_period,
+            DPeriod=d_period,
+            OverSold=over_sold,
+            OverBought=over_bought,
+            Order_Quantity=1
+        )
+        
+        # 計算績效指標
+        if len(temp_record.Profit) > 0:
+            total_profit = sum(temp_record.Profit)
+            win_rate = len([p for p in temp_record.Profit if p > 0]) / len(temp_record.Profit)
+            performance = total_profit * win_rate
+            
+            if performance > best_performance:
+                best_performance = performance
+                best_params = (k_period, d_period, over_sold, over_bought)
+        
+        # 更新進度條
+        progress = (i + 1) / len(param_combinations)
+        progress_bar.progress(progress)
+        status_text.text(f"測試參數組合: {i+1}/{len(param_combinations)} | 當前最佳: {best_params} 績效: {best_performance:.2f}")
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    return best_params
 
 # 绩效分析函数
 def calculate_and_display_performance(OrderRecord, product, trade_records):
@@ -1970,7 +2236,375 @@ def ChartOrder_RSI(KBar_df, TR):
                       height=800)
     st.plotly_chart(fig, use_container_width=True)
 
-# 其他策略的专属图表函数类似实现...
+###### 函數定義: 繪製布林通道策略專屬圖表
+def ChartOrder_BB(Kbar_df, TR):
+    # 布林通道計算
+    period = 20
+    num_std_dev = 2
+    Kbar_df['SMA'] = Kbar_df['close'].rolling(window=period).mean()
+    Kbar_df['Upper_Band'] = Kbar_df['SMA'] + (Kbar_df['close'].rolling(window=period).std() * num_std_dev)
+    Kbar_df['Lower_Band'] = Kbar_df['SMA'] - (Kbar_df['close'].rolling(window=period).std() * num_std_dev)
+    
+    # 尋找最後NAN值的位置
+    last_nan_index = max(
+        Kbar_df['SMA'].isna().sum(),
+        Kbar_df['Upper_Band'].isna().sum(),
+        Kbar_df['Lower_Band'].isna().sum()
+    )
+    
+    # 繪製圖表
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # 添加K線
+    fig.add_trace(go.Candlestick(
+        x=Kbar_df['time'],
+        open=Kbar_df['open'],
+        high=Kbar_df['high'],
+        low=Kbar_df['low'],
+        close=Kbar_df['close'],
+        name='K線'
+    ), secondary_y=True)
+    
+    # 添加布林通道
+    fig.add_trace(go.Scatter(
+        x=Kbar_df['time'][last_nan_index:], 
+        y=Kbar_df['SMA'][last_nan_index:], 
+        mode='lines',
+        line=dict(color='blue', width=1.5), 
+        name='中軌'
+    ), secondary_y=True)
+    
+    fig.add_trace(go.Scatter(
+        x=Kbar_df['time'][last_nan_index:], 
+        y=Kbar_df['Upper_Band'][last_nan_index:], 
+        mode='lines',
+        line=dict(color='red', width=1, dash='dash'), 
+        name='上軌',
+        fill=None
+    ), secondary_y=True)
+    
+    fig.add_trace(go.Scatter(
+        x=Kbar_df['time'][last_nan_index:], 
+        y=Kbar_df['Lower_Band'][last_nan_index:], 
+        mode='lines',
+        line=dict(color='green', width=1, dash='dash'), 
+        name='下軌',
+        fill='tonexty'
+    ), secondary_y=True)
+    
+    # 添加下單點位標記
+    for trade in TR:
+        if trade[0] == 'Buy':
+            fig.add_trace(go.Scatter(
+                x=[trade[2]], 
+                y=[trade[3]],
+                mode='markers',
+                marker=dict(color='red', symbol='triangle-up', size=10),
+                name='多單進場'
+            ), secondary_y=True)
+        elif trade[0] == 'Sell':
+            fig.add_trace(go.Scatter(
+                x=[trade[4]], 
+                y=[trade[5]],
+                mode='markers',
+                marker=dict(color='blue', symbol='triangle-down', size=10),
+                name='多單出場'
+            ), secondary_y=True)
+    
+    # 設置圖表佈局
+    fig.update_layout(
+        title='布林通道策略交易點位',
+        xaxis_title='時間',
+        yaxis_title='價格',
+        showlegend=True,
+        height=600
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+###### 函數定義: 繪製MACD策略專屬圖表
+def ChartOrder_MACD(Kbar_df, TR):
+    # 計算MACD
+    fast_period = 12
+    slow_period = 26
+    signal_period = 9
+    Kbar_df['EMA_Fast'] = Kbar_df['close'].ewm(span=fast_period, adjust=False).mean()
+    Kbar_df['EMA_Slow'] = Kbar_df['close'].ewm(span=slow_period, adjust=False).mean()
+    Kbar_df['MACD'] = Kbar_df['EMA_Fast'] - Kbar_df['EMA_Slow']
+    Kbar_df['Signal_Line'] = Kbar_df['MACD'].ewm(span=signal_period, adjust=False).mean()
+    Kbar_df['MACD_Histogram'] = Kbar_df['MACD'] - Kbar_df['Signal_Line']
+    
+    # 繪製圖表
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                       vertical_spacing=0.1, 
+                       row_heights=[0.7, 0.3])
+    
+    # K線圖
+    fig.add_trace(go.Candlestick(x=Kbar_df['time'],
+                                open=Kbar_df['open'],
+                                high=Kbar_df['high'],
+                                low=Kbar_df['low'],
+                                close=Kbar_df['close'],
+                                name='K線'),
+                row=1, col=1)
+    
+    # MACD圖
+    fig.add_trace(go.Bar(x=Kbar_df['time'], 
+                         y=Kbar_df['MACD_Histogram'], 
+                         name='MACD柱狀圖',
+                         marker_color=np.where(Kbar_df['MACD_Histogram'] > 0, 'green', 'red')),
+                row=2, col=1)
+    
+    fig.add_trace(go.Scatter(x=Kbar_df['time'], 
+                             y=Kbar_df['MACD'], 
+                             mode='lines', 
+                             name='DIF',
+                             line=dict(color='blue', width=2)),
+                row=2, col=1)
+    
+    fig.add_trace(go.Scatter(x=Kbar_df['time'], 
+                             y=Kbar_df['Signal_Line'], 
+                             mode='lines', 
+                             name='DEA',
+                             line=dict(color='orange', width=2)),
+                row=2, col=1)
+    
+    # 添加下單點位標記
+    for trade in TR:
+        if trade[0] == 'Buy':
+            fig.add_trace(go.Scatter(
+                x=[trade[2]], 
+                y=[trade[3]],
+                mode='markers',
+                marker=dict(color='red', symbol='triangle-up', size=10),
+                name='多單進場'
+            ), row=1, col=1)
+        elif trade[0] == 'Sell':
+            fig.add_trace(go.Scatter(
+                x=[trade[4]], 
+                y=[trade[5]],
+                mode='markers',
+                marker=dict(color='blue', symbol='triangle-down', size=10),
+                name='多單出場'
+            ), row=1, col=1)
+    
+    # 設置圖表佈局
+    fig.update_layout(
+        title='MACD策略交易圖',
+        xaxis_rangeslider_visible=False,
+        height=800
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+###### 函數定義: 繪製ATR策略專屬圖表
+def ChartOrder_ATR(Kbar_df, TR):
+    # 計算ATR
+    atr_period = 14
+    high_low = Kbar_df['high'] - Kbar_df['low']
+    high_close = (Kbar_df['high'] - Kbar_df['close'].shift()).abs()
+    low_close = (Kbar_df['low'] - Kbar_df['close'].shift()).abs()
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    Kbar_df['ATR'] = tr.rolling(window=atr_period).mean()
+    
+    # 繪製圖表
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                       vertical_spacing=0.1, 
+                       row_heights=[0.7, 0.3])
+    
+    # K線圖
+    fig.add_trace(go.Candlestick(x=Kbar_df['time'],
+                                open=Kbar_df['open'],
+                                high=Kbar_df['high'],
+                                low=Kbar_df['low'],
+                                close=Kbar_df['close'],
+                                name='K線'),
+                row=1, col=1)
+    
+    # ATR圖
+    fig.add_trace(go.Scatter(x=Kbar_df['time'], 
+                             y=Kbar_df['ATR'], 
+                             mode='lines', 
+                             name='ATR',
+                             line=dict(color='purple', width=2)),
+                row=2, col=1)
+    
+    # 添加下單點位標記
+    for trade in TR:
+        if trade[0] == 'Buy':
+            fig.add_trace(go.Scatter(
+                x=[trade[2]], 
+                y=[trade[3]],
+                mode='markers',
+                marker=dict(color='red', symbol='triangle-up', size=10),
+                name='多單進場'
+            ), row=1, col=1)
+        elif trade[0] == 'Sell':
+            fig.add_trace(go.Scatter(
+                x=[trade[4]], 
+                y=[trade[5]],
+                mode='markers',
+                marker=dict(color='blue', symbol='triangle-down', size=10),
+                name='多單出場'
+            ), row=1, col=1)
+    
+    # 設置圖表佈局
+    fig.update_layout(
+        title='ATR策略交易圖',
+        xaxis_rangeslider_visible=False,
+        height=800
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+###### 函數定義: 繪製KD策略專屬圖表
+def ChartOrder_KD(Kbar_df, TR):
+    # 計算KD
+    k_period = 14
+    d_period = 3
+    low_min = Kbar_df['low'].rolling(window=k_period).min()
+    high_max = Kbar_df['high'].rolling(window=k_period).max()
+    rsv = 100 * (Kbar_df['close'] - low_min) / (high_max - low_min)
+    Kbar_df['K'] = rsv.ewm(alpha=1/d_period, adjust=False).mean()
+    Kbar_df['D'] = Kbar_df['K'].ewm(alpha=1/d_period, adjust=False).mean()
+    
+    # 繪製圖表
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                       vertical_spacing=0.1, 
+                       row_heights=[0.7, 0.3])
+    
+    # K線圖
+    fig.add_trace(go.Candlestick(x=Kbar_df['time'],
+                                open=Kbar_df['open'],
+                                high=Kbar_df['high'],
+                                low=Kbar_df['low'],
+                                close=Kbar_df['close'],
+                                name='K線'),
+                row=1, col=1)
+    
+    # KD圖
+    fig.add_trace(go.Scatter(x=Kbar_df['time'], 
+                             y=Kbar_df['K'], 
+                             mode='lines', 
+                             name='K值',
+                             line=dict(color='blue', width=2)),
+                row=2, col=1)
+    
+    fig.add_trace(go.Scatter(x=Kbar_df['time'], 
+                             y=Kbar_df['D'], 
+                             mode='lines', 
+                             name='D值',
+                             line=dict(color='orange', width=2)),
+                row=2, col=1)
+    
+    # 添加超買超賣線
+    fig.add_hline(y=80, line_dash="dash", line_color="red", row=2, col=1)
+    fig.add_hline(y=20, line_dash="dash", line_color="green", row=2, col=1)
+    
+    # 添加下單點位標記
+    for trade in TR:
+        if trade[0] == 'Buy':
+            fig.add_trace(go.Scatter(
+                x=[trade[2]], 
+                y=[trade[3]],
+                mode='markers',
+                marker=dict(color='red', symbol='triangle-up', size=10),
+                name='多單進場'
+            ), row=1, col=1)
+        elif trade[0] == 'Sell':
+            fig.add_trace(go.Scatter(
+                x=[trade[4]], 
+                y=[trade[5]],
+                mode='markers',
+                marker=dict(color='blue', symbol='triangle-down', size=10),
+                name='多單出場'
+            ), row=1, col=1)
+    
+    # 設置圖表佈局
+    fig.update_layout(
+        title='KD策略交易圖',
+        xaxis_rangeslider_visible=False,
+        height=800
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def calculate_performance(choice, OrderRecord):
+    # 獲取合約乘數
+    multiplier = contract_multipliers.get(choice, 1)
+    
+    # 摩台期需要匯率轉換 (假設1:30)
+    if "摩台期貨" in choice:
+        multiplier *= 30  # 美元轉台幣
+        
+    # 計算各項績效指標
+    交易總盈虧 = OrderRecord.GetTotalProfit() * multiplier
+    平均每次盈虧 = OrderRecord.GetAverageProfit() * multiplier
+    平均投資報酬率 = OrderRecord.GetAverageProfitRate()
+    平均獲利_只看獲利的 = OrderRecord.GetAverEarn() * multiplier
+    平均虧損_只看虧損的 = OrderRecord.GetAverLoss() * multiplier
+    勝率 = OrderRecord.GetWinRate()
+    最大連續虧損 = OrderRecord.GetAccLoss() * multiplier
+    最大盈虧回落_MDD = OrderRecord.GetMDD() * multiplier
+    
+    if 最大盈虧回落_MDD > 0:
+        報酬風險比 = 交易總盈虧 / 最大盈虧回落_MDD
+    else:
+        報酬風險比 = '資料不足無法計算'
+        
+    return (交易總盈虧, 平均每次盈虧, 平均投資報酬率, 
+            平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 
+            最大連續虧損, 最大盈虧回落_MDD, 報酬風險比)
+
+
+# 定義各類商品的合約乘數
+contract_multipliers = {
+    # 股票類 (單位：元/張，1張=1000股)
+    '台積電 2330: 2020.01.02 至 2025.04.16': 1000,
+    '英業達 2356: 2020.01.02 至 2024.04.12': 1000,
+    '堤維西 1522: 2020.01.02 至 2024.04.12': 1000,
+    '0050 台灣50ETF: 2020.01.02 至 2025.03.10': 1000,
+    '00631L 台灣50正2: 2023.04.17 至 2025.04.17': 1000,
+    '華碩 2357: 2023.04.17 至 2025.04.16': 1000,
+    
+    # 期貨類 (單位：元/點)
+    '大台指期貨2024.12到期: 2023.12 至 2024.4.11': 200,    # 大台指
+    '小台指期貨2024.12到期: 2023.12 至 2024.4.11': 50,     # 小台指
+    '金融期貨 CBF: 2023.04.17 至 2025.04.17': 1000,        # 金融期
+    '電子期貨 CCF: 2023.04.17 至 2025.04.16': 4000,        # 電子期
+    '小型電子期貨 CDF: 2020.03.02 至 2025.04.14': 1000,    # 小型電子期
+    '非金電期貨 CEF: 2023.04.17 至 2025.04.16': 4000,      # 非金電期
+    '摩台期貨 CMF: 2023.04.17 至 2025.04.17': 100,        # 摩台期(美元計價)
+    '小型金融期貨 CQF: 2023.04.17 至 2025.04.17': 250,     # 小型金融期
+    '美元指數期貨 FXF: 2020.03.02 至 2025.04.14': 1000     # 美元指數期
+}
+
+# 統一績效計算函數
+def calculate_performance(choice, OrderRecord):
+    # 獲取合約乘數
+    multiplier = contract_multipliers.get(choice, 1)
+    
+    # 摩台期需要匯率轉換 (假設1:30)
+    if "摩台期貨" in choice:
+        multiplier *= 30  # 美元轉台幣
+        
+    # 計算各項績效指標
+    交易總盈虧 = OrderRecord.GetTotalProfit() * multiplier
+    平均每次盈虧 = OrderRecord.GetAverageProfit() * multiplier
+    平均投資報酬率 = OrderRecord.GetAverageProfitRate()
+    平均獲利_只看獲利的 = OrderRecord.GetAverEarn() * multiplier
+    平均虧損_只看虧損的 = OrderRecord.GetAverLoss() * multiplier
+    勝率 = OrderRecord.GetWinRate()
+    最大連續虧損 = OrderRecord.GetAccLoss() * multiplier
+    最大盈虧回落_MDD = OrderRecord.GetMDD() * multiplier
+    
+    if 最大盈虧回落_MDD > 0:
+        報酬風險比 = 交易總盈虧 / 最大盈虧回落_MDD
+    else:
+        報酬風險比 = '資料不足無法計算'
+        
+    return (交易總盈虧, 平均每次盈虧, 平均投資報酬率, 
+            平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 
+            最大連續虧損, 最大盈虧回落_MDD, 報酬風險比)
+
+
 #%%
 ####### (6) 程式交易 ####### 
 st.subheader("程式交易:")
@@ -2287,9 +2921,7 @@ if st.button('開始回測'):
         st.write("多策略組合不提供專屬圖表")
     
     # 計算並顯示績效指標
-    # 確保 OrderRecord 已初始化且有交易記錄
     if hasattr(OrderRecord, 'Profit') and len(OrderRecord.Profit) > 0:
-        # 使用統一的績效計算函數
         results = calculate_performance(choice, OrderRecord)
         (交易總盈虧, 平均每次盈虧, 平均投資報酬率, 
          平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 
@@ -2297,8 +2929,11 @@ if st.button('開始回測'):
         
         # 顯示績效
         data = {
-            "項目": ["交易總盈虧(元)", "平均每次盈虧(元)", "平均投資報酬率", "平均獲利(只看獲利的)(元)", "平均虧損(只看虧損的)(元)", "勝率", "最大連續虧損(元)", "最大盈虧回落(MDD)(元)", "報酬風險比(交易總盈虧/最大盈虧回落(MDD))"],
-            "數值": [交易總盈虧, 平均每次盈虧, 平均投資報酬率, 平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 最大連續虧損, 最大盈虧回落_MDD, 報酬風險比]
+            "項目": ["交易總盈虧(元)", "平均每次盈虧(元)", "平均投資報酬率", "平均獲利(只看獲利的)(元)", 
+                   "平均虧損(只看虧損的)(元)", "勝率", "最大連續虧損(元)", "最大盈虧回落(MDD)(元)", 
+                   "報酬風險比(交易總盈虧/最大盈虧回落(MDD))"],
+            "數值": [交易總盈虧, 平均每次盈虧, 平均投資報酬率, 平均獲利_只看獲利的, 
+                   平均虧損_只看虧損的, 勝率, 最大連續虧損, 最大盈虧回落_MDD, 報酬風險比]
         }
         df = pd.DataFrame(data)
         st.write(df)
@@ -2322,57 +2957,5 @@ if st.button('開始回測'):
         OrderRecord.GeneratorProfit_rateChart(StrategyName='MA')
     else:
         st.warning("沒有交易記錄(已經了結之交易) !")
-
-
-
-# 定義各類商品的合約乘數
-contract_multipliers = {
-    # 股票類 (單位：元/張，1張=1000股)
-    '台積電 2330: 2020.01.02 至 2025.04.16': 1000,
-    '英業達 2356: 2020.01.02 至 2024.04.12': 1000,
-    '堤維西 1522: 2020.01.02 至 2024.04.12': 1000,
-    '0050 台灣50ETF: 2020.01.02 至 2025.03.10': 1000,
-    '00631L 台灣50正2: 2023.04.17 至 2025.04.17': 1000,
-    '華碩 2357: 2023.04.17 至 2025.04.16': 1000,
-    
-    # 期貨類 (單位：元/點)
-    '大台指期貨2024.12到期: 2023.12 至 2024.4.11': 200,    # 大台指
-    '小台指期貨2024.12到期: 2023.12 至 2024.4.11': 50,     # 小台指
-    '金融期貨 CBF: 2023.04.17 至 2025.04.17': 1000,        # 金融期
-    '電子期貨 CCF: 2023.04.17 至 2025.04.16': 4000,        # 電子期
-    '小型電子期貨 CDF: 2020.03.02 至 2025.04.14': 1000,    # 小型電子期
-    '非金電期貨 CEF: 2023.04.17 至 2025.04.16': 4000,      # 非金電期
-    '摩台期貨 CMF: 2023.04.17 至 2025.04.17': 100,        # 摩台期(美元計價)
-    '小型金融期貨 CQF: 2023.04.17 至 2025.04.17': 250,     # 小型金融期
-    '美元指數期貨 FXF: 2020.03.02 至 2025.04.14': 1000     # 美元指數期
-}
-
-# 統一績效計算函數
-def calculate_performance(choice, OrderRecord):
-    # 獲取合約乘數
-    multiplier = contract_multipliers.get(choice, 1)
-    
-    # 摩台期需要匯率轉換 (假設1:30)
-    if "摩台期貨" in choice:
-        multiplier *= 30  # 美元轉台幣
-        
-    # 計算各項績效指標
-    交易總盈虧 = OrderRecord.GetTotalProfit() * multiplier
-    平均每次盈虧 = OrderRecord.GetAverageProfit() * multiplier
-    平均投資報酬率 = OrderRecord.GetAverageProfitRate()
-    平均獲利_只看獲利的 = OrderRecord.GetAverEarn() * multiplier
-    平均虧損_只看虧損的 = OrderRecord.GetAverLoss() * multiplier
-    勝率 = OrderRecord.GetWinRate()
-    最大連續虧損 = OrderRecord.GetAccLoss() * multiplier
-    最大盈虧回落_MDD = OrderRecord.GetMDD() * multiplier
-    
-    if 最大盈虧回落_MDD > 0:
-        報酬風險比 = 交易總盈虧 / 最大盈虧回落_MDD
-    else:
-        報酬風險比 = '資料不足無法計算'
-        
-    return (交易總盈虧, 平均每次盈虧, 平均投資報酬率, 
-            平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 
-            最大連續虧損, 最大盈虧回落_MDD, 報酬風險比)
 
 
