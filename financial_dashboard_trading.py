@@ -197,8 +197,31 @@ KBar_dic = Change_Cycle(Date,cycle_duration,KBar_dic,product_name)   ## 設定cy
 
 ###### 將K線 Dictionary 轉換成 Dataframe
 KBar_df = pd.DataFrame(KBar_dic)
+with st.expander("MA 交叉策略參數設定"):
+    MoveStopLoss   = st.slider('停損量',        0, 100, 30)
+    LongMAPeriod   = st.slider('長 MA 週期',    1, 100, 10)
+    ShortMAPeriod  = st.slider('短 MA 週期',    1, 100,  2)
+    Order_Quantity = st.slider('下單數量',      1, 100,  1)
+# (a) 存下畫指標用的原始 KBar_df
+KBar_dfs[label]    = KBar_df
+# (b) 執行 MA 回測並存 RecordObj
+RecordObj          = Record()
+RecordObj          = back_test_ma_strategy(
+                         RecordObj,
+                         KBar_df,
+                         MoveStopLoss, LongMAPeriod,
+                         ShortMAPeriod, Order_Quantity
+                     )
+record_objs[label] = RecordObj
 
+# 放在最前面或 Section (6) 之前
+def back_test_ma_strategy(record_obj, KBar_df,
+                          MoveStopLoss, LongMAPeriod, ShortMAPeriod, Order_Quantity):
+    # …你的 MA 交叉回測邏輯…
+    return record_obj
 
+def ChartOrder_MA(Kbar_df, TR):
+    # …你的下單點位繪圖邏輯…
 
 #%%
 ####### (4) 計算各種技術指標 #######
@@ -805,22 +828,84 @@ st.subheader("程式交易:")
 ###### 函數定義: 繪製K線圖加上MA以及下單點位
 # @st.cache_data(ttl=3600, show_spinner="正在加載資料...")  ## Add the caching decorator
 # 取得當前所選商品的 KBar_df
-df_trade = KBar_dfs.get(choice)
-if df_trade is not None:
-    # 再跑一次 MA 交叉策略，取得交易記錄
-    rec2 = Record()
-    rec2 = back_test_ma_strategy(
-        rec2,
-        df_trade,
-        MoveStopLoss,
-        LongMAPeriod,
-        ShortMAPeriod,
-        Order_Quantity
-    )
-    # 繪製下單點位
-    ChartOrder_MA(df_trade, rec2.GetTradeRecord())
-else:
-    st.error("無法取得 KBar_df，程式交易失敗")
+# 因為是單一商品，所以直接拿 KBar_df
+df_trade = KBar_df
+rec2     = Record()
+rec2     = back_test_ma_strategy(
+             rec2,
+             df_trade,
+             MoveStopLoss,
+             LongMAPeriod,
+             ShortMAPeriod,
+             Order_Quantity
+          )
+ChartOrder_MA(df_trade, rec2.GetTradeRecord())
+
+
+#%%
+###### 選擇不同交易策略:
+choices_strategies = ['<進場>: 移動平均線黃金交叉作多,死亡交叉作空. <出場>: 結算平倉(期貨), 移動停損.']
+choice_strategy = st.selectbox('選擇交易策略', choices_strategies, index=0)
+
+
+#%%
+###### 各別不同策略參數設定 & 回測
+#if choice_strategy == '<進場>: 移動平均線黃金交叉作多,死亡交叉作空. <出場>: 結算平倉(期貨), 移動停損.':
+#%% 回測函式定義：MA 黃金／死亡交叉策略
+def back_test_ma_strategy(record_obj, KBar_df,
+                          MoveStopLoss, LongMAPeriod, ShortMAPeriod, Order_Quantity):
+    # 1) 計算長短 MA
+    KBar_df['MA_long']  = Calculate_MA(KBar_df, period=LongMAPeriod)
+    KBar_df['MA_short'] = Calculate_MA(KBar_df, period=ShortMAPeriod)
+    # 找最後一筆有效 MA 的索引
+    last_nan = KBar_df['MA_long'][::-1].index[KBar_df['MA_long'][::-1].apply(pd.isna)][0]
+
+    # 2) 主回測迴圈
+    for n in range(last_nan+1, len(KBar_df['time'])-1):
+        t_next = KBar_df['time'][n+1]
+        p_next = KBar_df['product'][n+1]
+        o_next = KBar_df['open'][n+1]
+        c_curr = KBar_df['close'][n]
+        ml_prev = KBar_df['MA_long'][n-1]; ms_prev = KBar_df['MA_short'][n-1]
+        ml_curr = KBar_df['MA_long'][n];   ms_curr = KBar_df['MA_short'][n]
+
+        # 無持倉 → 黃金／死亡交叉進場
+        if record_obj.GetOpenInterest()==0:
+            if ms_prev<=ml_prev and ms_curr>ml_curr:
+                record_obj.Order('Buy',  p_next, t_next, o_next, Order_Quantity)
+                StopLossPoint = o_next - MoveStopLoss
+                continue
+            if ms_prev>=ml_prev and ms_curr<ml_curr:
+                record_obj.Order('Sell', p_next, t_next, o_next, Order_Quantity)
+                StopLossPoint = o_next + MoveStopLoss
+                continue
+
+        oi = record_obj.GetOpenInterest()
+        # 多單持倉 → 期貨換約平倉／移動停損／觸及停損出場
+        if oi>0:
+            if p_next!=KBar_df['product'][n]:
+                record_obj.Cover('Sell', KBar_df['product'][n], KBar_df['time'][n],
+                                 KBar_df['close'][n], oi)
+                continue
+            if c_curr - MoveStopLoss > StopLossPoint:
+                StopLossPoint = c_curr - MoveStopLoss
+            elif c_curr < StopLossPoint:
+                record_obj.Cover('Sell', p_next, t_next, o_next, oi)
+            continue
+
+        # 空單持倉 → 同理
+        if oi<0:
+            if p_next!=KBar_df['product'][n]:
+                record_obj.Cover('Buy', KBar_df['product'][n], KBar_df['time'][n],
+                                 KBar_df['close'][n], -oi)
+                continue
+            if c_curr + MoveStopLoss < StopLossPoint:
+                StopLossPoint = c_curr + MoveStopLoss
+            elif c_curr > StopLossPoint:
+                record_obj.Cover('Buy', p_next, t_next, o_next, -oi)
+            continue
+
+    return record_obj
 
 def ChartOrder_MA(Kbar_df,TR):
     # # 將K線轉為DataFrame
@@ -904,72 +989,6 @@ def ChartOrder_MA(Kbar_df,TR):
  
     fig5.layout.yaxis2.showgrid=True
     st.plotly_chart(fig5, use_container_width=True)
-
-
-#%%
-###### 選擇不同交易策略:
-choices_strategies = ['<進場>: 移動平均線黃金交叉作多,死亡交叉作空. <出場>: 結算平倉(期貨), 移動停損.']
-choice_strategy = st.selectbox('選擇交易策略', choices_strategies, index=0)
-
-
-#%%
-###### 各別不同策略參數設定 & 回測
-#if choice_strategy == '<進場>: 移動平均線黃金交叉作多,死亡交叉作空. <出場>: 結算平倉(期貨), 移動停損.':
-#%% 回測函式定義：MA 黃金／死亡交叉策略
-def back_test_ma_strategy(record_obj, KBar_df,
-                          MoveStopLoss, LongMAPeriod, ShortMAPeriod, Order_Quantity):
-    # 1) 計算長短 MA
-    KBar_df['MA_long']  = Calculate_MA(KBar_df, period=LongMAPeriod)
-    KBar_df['MA_short'] = Calculate_MA(KBar_df, period=ShortMAPeriod)
-    # 找最後一筆有效 MA 的索引
-    last_nan = KBar_df['MA_long'][::-1].index[KBar_df['MA_long'][::-1].apply(pd.isna)][0]
-
-    # 2) 主回測迴圈
-    for n in range(last_nan+1, len(KBar_df['time'])-1):
-        t_next = KBar_df['time'][n+1]
-        p_next = KBar_df['product'][n+1]
-        o_next = KBar_df['open'][n+1]
-        c_curr = KBar_df['close'][n]
-        ml_prev = KBar_df['MA_long'][n-1]; ms_prev = KBar_df['MA_short'][n-1]
-        ml_curr = KBar_df['MA_long'][n];   ms_curr = KBar_df['MA_short'][n]
-
-        # 無持倉 → 黃金／死亡交叉進場
-        if record_obj.GetOpenInterest()==0:
-            if ms_prev<=ml_prev and ms_curr>ml_curr:
-                record_obj.Order('Buy',  p_next, t_next, o_next, Order_Quantity)
-                StopLossPoint = o_next - MoveStopLoss
-                continue
-            if ms_prev>=ml_prev and ms_curr<ml_curr:
-                record_obj.Order('Sell', p_next, t_next, o_next, Order_Quantity)
-                StopLossPoint = o_next + MoveStopLoss
-                continue
-
-        oi = record_obj.GetOpenInterest()
-        # 多單持倉 → 期貨換約平倉／移動停損／觸及停損出場
-        if oi>0:
-            if p_next!=KBar_df['product'][n]:
-                record_obj.Cover('Sell', KBar_df['product'][n], KBar_df['time'][n],
-                                 KBar_df['close'][n], oi)
-                continue
-            if c_curr - MoveStopLoss > StopLossPoint:
-                StopLossPoint = c_curr - MoveStopLoss
-            elif c_curr < StopLossPoint:
-                record_obj.Cover('Sell', p_next, t_next, o_next, oi)
-            continue
-
-        # 空單持倉 → 同理
-        if oi<0:
-            if p_next!=KBar_df['product'][n]:
-                record_obj.Cover('Buy', KBar_df['product'][n], KBar_df['time'][n],
-                                 KBar_df['close'][n], -oi)
-                continue
-            if c_curr + MoveStopLoss < StopLossPoint:
-                StopLossPoint = c_curr + MoveStopLoss
-            elif c_curr > StopLossPoint:
-                record_obj.Cover('Buy', p_next, t_next, o_next, -oi)
-            continue
-
-    return record_obj
 
 ##### 繪製K線圖加上MA以及下單點位
 # @st.cache_data(ttl=3600, show_spinner="正在加載資料...")  ## Add the caching decorator
