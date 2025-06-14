@@ -521,9 +521,420 @@ if 'PSAR' not in KBar_df.columns:
     KBar_df['PSAR'] = Calculate_PSAR(KBar_df)
 
 #%% 回測函式
-def back_test_ma_strategy(record_obj, KBar_df,
-                          MoveStopLoss, LongMAPeriod, ShortMAPeriod, Order_Quantity):
-    # …（照之前給的函式貼這段）…
+
+# RSI逆勢策略回测函数
+def back_test_rsi_strategy(record_obj, KBar_df, MoveStopLoss, RSIPeriod, OverSold, OverBought, Order_Quantity):
+    # 计算RSI
+    KBar_df['RSI'] = Calculate_RSI(KBar_df, period=RSIPeriod)
+    
+    # 寻找最后NAN值的位置
+    last_nan_index = KBar_df['RSI'].last_valid_index() or 0
+    
+    # 回测逻辑
+    StopLossPoint = 0
+    for i in range(last_nan_index + 1, len(KBar_df) - 1):
+        # 进场: 如果无未平仓部位 
+        if record_obj.GetOpenInterest() == 0:
+            # 多单进場: RSI低于超卖线
+            if KBar_df['RSI'][i] < OverSold:
+                record_obj.Order('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice - MoveStopLoss
+                continue
+            # 空单进場: RSI高于超买线
+            if KBar_df['RSI'][i] > OverBought:
+                record_obj.Order('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice + MoveStopLoss
+                continue
+        
+        # 多单出场: 如果有多单部位   
+        elif record_obj.GetOpenInterest() > 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Sell', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], record_obj.GetOpenInterest())
+                continue
+            # 逐笔更新移动停损价
+            if KBar_df['close'][i] - MoveStopLoss > StopLossPoint:
+                StopLossPoint = KBar_df['close'][i] - MoveStopLoss
+            # 如果触及停损价
+            elif KBar_df['close'][i] < StopLossPoint:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+            # RSI超买出场
+            if KBar_df['RSI'][i] > OverBought:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+        
+        # 空单出场: 如果有空单部位
+        elif record_obj.GetOpenInterest() < 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Buy', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], -record_obj.GetOpenInterest())
+                continue
+            # 逐笔更新移动停损价
+            if KBar_df['close'][i] + MoveStopLoss < StopLossPoint:
+                StopLossPoint = KBar_df['close'][i] + MoveStopLoss
+            # 如果触及停损价
+            elif KBar_df['close'][i] > StopLossPoint:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+            # RSI超卖出场
+            if KBar_df['RSI'][i] < OverSold:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+    
+    return record_obj
+
+# 布林通道策略回测函数
+def back_test_bb_strategy(record_obj, KBar_df, MoveStopLoss, BBPeriod, NumStdDev, Order_Quantity):
+    # 计算布林通道
+    KBar_df = Calculate_Bollinger_Bands(KBar_df, period=BBPeriod, num_std_dev=NumStdDev)
+    
+    # 寻找最后NAN值的位置
+    last_nan_index = KBar_df['SMA'].last_valid_index() or 0
+    
+    # 回测逻辑
+    StopLossPoint = 0
+    for i in range(last_nan_index + 1, len(KBar_df) - 1):
+        # 进场: 如果无未平仓部位 
+        if record_obj.GetOpenInterest() == 0:
+            # 多单进場: 价格触及下轨
+            if KBar_df['close'][i] < KBar_df['Lower_Band'][i]:
+                record_obj.Order('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice - MoveStopLoss
+                continue
+            # 空单进場: 价格触及上轨
+            if KBar_df['close'][i] > KBar_df['Upper_Band'][i]:
+                record_obj.Order('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice + MoveStopLoss
+                continue
+        
+        # 多单出场: 如果有多单部位   
+        elif record_obj.GetOpenInterest() > 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Sell', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], record_obj.GetOpenInterest())
+                continue
+            # 触及中轨出场
+            if KBar_df['close'][i] > KBar_df['SMA'][i]:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+            # 逐笔更新移动停损价
+            if KBar_df['close'][i] - MoveStopLoss > StopLossPoint:
+                StopLossPoint = KBar_df['close'][i] - MoveStopLoss
+            # 如果触及停损价
+            elif KBar_df['close'][i] < StopLossPoint:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+        
+        # 空单出场: 如果有空单部位
+        elif record_obj.GetOpenInterest() < 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Buy', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], -record_obj.GetOpenInterest())
+                continue
+            # 触及中轨出场
+            if KBar_df['close'][i] < KBar_df['SMA'][i]:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+            # 逐笔更新移动停损价
+            if KBar_df['close'][i] + MoveStopLoss < StopLossPoint:
+                StopLossPoint = KBar_df['close'][i] + MoveStopLoss
+            # 如果触及停损价
+            elif KBar_df['close'][i] > StopLossPoint:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+    
+    return record_obj
+
+# MACD策略回测函数
+def back_test_macd_strategy(record_obj, KBar_df, MoveStopLoss, FastPeriod, SlowPeriod, SignalPeriod, Order_Quantity):
+    # 计算MACD
+    KBar_df = Calculate_MACD(KBar_df, fast_period=FastPeriod, slow_period=SlowPeriod, signal_period=SignalPeriod)
+    
+    # 寻找最后NAN值的位置
+    last_nan_index = KBar_df['MACD'].last_valid_index() or 0
+    
+    # 回测逻辑
+    StopLossPoint = 0
+    for i in range(last_nan_index + 1, len(KBar_df) - 1):
+        # 进场: 如果无未平仓部位 
+        if record_obj.GetOpenInterest() == 0:
+            # 多单进場: MACD上穿信号线
+            if KBar_df['MACD'][i-1] < KBar_df['Signal_Line'][i-1] and KBar_df['MACD'][i] > KBar_df['Signal_Line'][i]:
+                record_obj.Order('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice - MoveStopLoss
+                continue
+            # 空单进場: MACD下穿信号线
+            if KBar_df['MACD'][i-1] > KBar_df['Signal_Line'][i-1] and KBar_df['MACD'][i] < KBar_df['Signal_Line'][i]:
+                record_obj.Order('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice + MoveStopLoss
+                continue
+        
+        # 多单出场: 如果有多单部位   
+        elif record_obj.GetOpenInterest() > 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Sell', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], record_obj.GetOpenInterest())
+                continue
+            # 逐笔更新移动停损价
+            if KBar_df['close'][i] - MoveStopLoss > StopLossPoint:
+                StopLossPoint = KBar_df['close'][i] - MoveStopLoss
+            # 如果触及停损价
+            elif KBar_df['close'][i] < StopLossPoint:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+            # MACD下穿信号线出场
+            if KBar_df['MACD'][i-1] > KBar_df['Signal_Line'][i-1] and KBar_df['MACD'][i] < KBar_df['Signal_Line'][i]:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+        
+        # 空单出场: 如果有空单部位
+        elif record_obj.GetOpenInterest() < 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Buy', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], -record_obj.GetOpenInterest())
+                continue
+            # 逐笔更新移动停损价
+            if KBar_df['close'][i] + MoveStopLoss < StopLossPoint:
+                StopLossPoint = KBar_df['close'][i] + MoveStopLoss
+            # 如果触及停损价
+            elif KBar_df['close'][i] > StopLossPoint:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+            # MACD上穿信号线出场
+            if KBar_df['MACD'][i-1] < KBar_df['Signal_Line'][i-1] and KBar_df['MACD'][i] > KBar_df['Signal_Line'][i]:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+    
+    return record_obj
+
+# ATR策略回测函数
+def back_test_atr_strategy(record_obj, KBar_df, MoveStopLoss, ATRPeriod, ATRMultiplier, Order_Quantity):
+    # 计算ATR
+    KBar_df['ATR'] = Calculate_ATR(KBar_df, period=ATRPeriod)
+    
+    # 寻找最后NAN值的位置
+    last_nan_index = KBar_df['ATR'].last_valid_index() or 0
+    
+    # 回测逻辑
+    StopLossPoint = 0
+    for i in range(last_nan_index + 1, len(KBar_df) - 1):
+        # 进场: 如果无未平仓部位 
+        if record_obj.GetOpenInterest() == 0:
+            # 使用简单趋势跟随策略
+            if KBar_df['close'][i] > KBar_df['close'][i-5]:  # 5期上涨
+                record_obj.Order('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice - (ATRMultiplier * KBar_df['ATR'][i])
+                continue
+            elif KBar_df['close'][i] < KBar_df['close'][i-5]:  # 5期下跌
+                record_obj.Order('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice + (ATRMultiplier * KBar_df['ATR'][i])
+                continue
+        
+        # 多单出场: 如果有多单部位   
+        elif record_obj.GetOpenInterest() > 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Sell', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], record_obj.GetOpenInterest())
+                continue
+            # 更新ATR停损点
+            current_stop = KBar_df['close'][i] - (ATRMultiplier * KBar_df['ATR'][i])
+            if current_stop > StopLossPoint:
+                StopLossPoint = current_stop
+            # 如果触及停损价
+            if KBar_df['close'][i] < StopLossPoint:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+        
+        # 空单出场: 如果有空单部位
+        elif record_obj.GetOpenInterest() < 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Buy', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], -record_obj.GetOpenInterest())
+                continue
+            # 更新ATR停损点
+            current_stop = KBar_df['close'][i] + (ATRMultiplier * KBar_df['ATR'][i])
+            if current_stop < StopLossPoint:
+                StopLossPoint = current_stop
+            # 如果触及停损价
+            if KBar_df['close'][i] > StopLossPoint:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+    
+    return record_obj
+
+# KD策略回测函数
+def back_test_kd_strategy(record_obj, KBar_df, MoveStopLoss, KPeriod, DPeriod, OverSold, OverBought, Order_Quantity):
+    # 计算KD
+    KBar_df['K'], KBar_df['D'] = Calculate_KD(KBar_df, k_period=KPeriod, d_period=DPeriod)
+    
+    # 寻找最后NAN值的位置
+    last_nan_index = KBar_df['K'].last_valid_index() or 0
+    
+    # 回测逻辑
+    StopLossPoint = 0
+    for i in range(last_nan_index + 1, len(KBar_df) - 1):
+        # 进场: 如果无未平仓部位 
+        if record_obj.GetOpenInterest() == 0:
+            # 多单进場: K线上穿D线且在超卖区
+            if KBar_df['K'][i-1] < KBar_df['D'][i-1] and KBar_df['K'][i] > KBar_df['D'][i] and KBar_df['K'][i] < OverSold:
+                record_obj.Order('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice - MoveStopLoss
+                continue
+            # 空单进場: K线下穿D线且在超买区
+            if KBar_df['K'][i-1] > KBar_df['D'][i-1] and KBar_df['K'][i] < KBar_df['D'][i] and KBar_df['K'][i] > OverBought:
+                record_obj.Order('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice + MoveStopLoss
+                continue
+        
+        # 多单出场: 如果有多单部位   
+        elif record_obj.GetOpenInterest() > 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Sell', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], record_obj.GetOpenInterest())
+                continue
+            # 逐笔更新移动停损价
+            if KBar_df['close'][i] - MoveStopLoss > StopLossPoint:
+                StopLossPoint = KBar_df['close'][i] - MoveStopLoss
+            # 如果触及停损价
+            elif KBar_df['close'][i] < StopLossPoint:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+            # K线下穿D线出场
+            if KBar_df['K'][i-1] > KBar_df['D'][i-1] and KBar_df['K'][i] < KBar_df['D'][i]:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+        
+        # 空单出场: 如果有空单部位
+        elif record_obj.GetOpenInterest() < 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Buy', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], -record_obj.GetOpenInterest())
+                continue
+            # 逐笔更新移动停损价
+            if KBar_df['close'][i] + MoveStopLoss < StopLossPoint:
+                StopLossPoint = KBar_df['close'][i] + MoveStopLoss
+            # 如果触及停损价
+            elif KBar_df['close'][i] > StopLossPoint:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+            # K线上穿D线出场
+            if KBar_df['K'][i-1] < KBar_df['D'][i-1] and KBar_df['K'][i] > KBar_df['D'][i]:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+    
+    return record_obj
+
+# 多策略组合回测函数
+def back_test_multi_strategy(record_obj, KBar_df, MoveStopLoss, Order_Quantity, params):
+    # 初始化信号计数器
+    buy_signals = 0
+    sell_signals = 0
+    
+    # 计算所有策略的信号
+    # 移动平均线策略信号
+    KBar_df['MA_long'] = Calculate_MA(KBar_df, period=params['LongMAPeriod'])
+    KBar_df['MA_short'] = Calculate_MA(KBar_df, period=params['ShortMAPeriod'])
+    
+    # RSI策略信号
+    KBar_df['RSI'] = Calculate_RSI(KBar_df, period=params['RSIPeriod'])
+    
+    # 布林通道策略信号
+    KBar_df = Calculate_Bollinger_Bands(KBar_df, period=params['BBPeriod'], num_std_dev=params['NumStdDev'])
+    
+    # 寻找最后NAN值的位置
+    last_nan_index = max(
+        KBar_df['MA_long'].last_valid_index() or 0,
+        KBar_df['RSI'].last_valid_index() or 0,
+        KBar_df['SMA'].last_valid_index() or 0
+    )
+    
+    # 回测逻辑
+    StopLossPoint = 0
+    for i in range(last_nan_index + 1, len(KBar_df) - 1):
+        # 重置信号计数器
+        buy_signals = 0
+        sell_signals = 0
+        
+        # MA策略信号
+        if KBar_df['MA_short'][i] > KBar_df['MA_long'][i]:
+            buy_signals += params['Weight_MA']
+        elif KBar_df['MA_short'][i] < KBar_df['MA_long'][i]:
+            sell_signals += params['Weight_MA']
+        
+        # RSI策略信号
+        if KBar_df['RSI'][i] < params['OverSold']:
+            buy_signals += params['Weight_RSI']
+        elif KBar_df['RSI'][i] > params['OverBought']:
+            sell_signals += params['Weight_RSI']
+        
+        # 布林通道策略信号
+        if KBar_df['close'][i] < KBar_df['Lower_Band'][i]:
+            buy_signals += params['Weight_BB']
+        elif KBar_df['close'][i] > KBar_df['Upper_Band'][i]:
+            sell_signals += params['Weight_BB']
+        
+        # 进场: 如果无未平仓部位 
+        if record_obj.GetOpenInterest() == 0:
+            # 多单进場: 综合信号达到阈值
+            if buy_signals > 0.7:  # 70%权重支持买入
+                record_obj.Order('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice - MoveStopLoss
+                continue
+            # 空单进場: 综合信号达到阈值
+            if sell_signals > 0.7:  # 70%权重支持卖出
+                record_obj.Order('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], Order_Quantity)
+                OrderPrice = KBar_df['open'][i+1]
+                StopLossPoint = OrderPrice + MoveStopLoss
+                continue
+        
+        # 多单出场: 如果有多单部位   
+        elif record_obj.GetOpenInterest() > 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Sell', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], record_obj.GetOpenInterest())
+                continue
+            # 逐笔更新移动停损价
+            if KBar_df['close'][i] - MoveStopLoss > StopLossPoint:
+                StopLossPoint = KBar_df['close'][i] - MoveStopLoss
+            # 如果触及停损价
+            elif KBar_df['close'][i] < StopLossPoint:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+            # 综合信号转为卖出
+            if sell_signals > buy_signals and sell_signals > 0.5:
+                record_obj.Cover('Sell', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], record_obj.GetOpenInterest())
+                continue
+        
+        # 空单出场: 如果有空单部位
+        elif record_obj.GetOpenInterest() < 0:
+            # 结算平仓(期货才使用)
+            if KBar_df['product'][i+1] != KBar_df['product'][i]:
+                record_obj.Cover('Buy', KBar_df['product'][i], KBar_df['time'][i], KBar_df['close'][i], -record_obj.GetOpenInterest())
+                continue
+            # 逐笔更新移动停损价
+            if KBar_df['close'][i] + MoveStopLoss < StopLossPoint:
+                StopLossPoint = KBar_df['close'][i] + MoveStopLoss
+            # 如果触及停损价
+            elif KBar_df['close'][i] > StopLossPoint:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+            # 综合信号转为买入
+            if buy_signals > sell_signals and buy_signals > 0.5:
+                record_obj.Cover('Buy', KBar_df['product'][i+1], KBar_df['time'][i+1], KBar_df['open'][i+1], -record_obj.GetOpenInterest())
+                continue
+    
     return record_obj
 #%%
 ###### K線圖, 移動平均線MA
@@ -1963,3 +2374,5 @@ def calculate_performance(choice, OrderRecord):
     return (交易總盈虧, 平均每次盈虧, 平均投資報酬率, 
             平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 
             最大連續虧損, 最大盈虧回落_MDD, 報酬風險比)
+
+
