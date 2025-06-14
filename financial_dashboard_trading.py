@@ -914,12 +914,13 @@ def back_test_multi_strategy(record_obj, KBar_df, MoveStopLoss, Order_Quantity, 
             'BB_Signal': bb_contribution
         })
         
-        # ... [剩余回测逻辑保持不变] ...
-    
     # 创建信号DataFrame
-    signals_df = pd.DataFrame(signals_data)
-    if not signals_df.empty:
+    if signals_data:  # 确保有数据
+        signals_df = pd.DataFrame(signals_data)
+        signals_df['time'] = pd.to_datetime(signals_df['time'])  # 确保时间格式正确
         signals_df = signals_df.set_index('time')
+    else:
+        signals_df = pd.DataFrame()  # 空DataFrame
     
     return record_obj, signals_df
 #%%
@@ -3116,6 +3117,11 @@ if st.button('開始回測'):
             # 定义多策略组合的图表函数
             def ChartOrder_Multi(Kbar_df, TR, signals_df, buy_threshold, sell_threshold):
                 """多策略組合專屬圖表"""
+                st.write(f"信号数据行数: {len(signals_df)}")
+                st.write(f"交易记录数量: {len(TR)}")
+                if signals_df.empty:
+                    st.warning("信号数据为空，无法绘制图表")
+                    return None
                 fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
                                    vertical_spacing=0.05,
                                    row_heights=[0.6, 0.2, 0.2],
