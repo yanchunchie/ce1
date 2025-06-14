@@ -35,44 +35,81 @@ class Record():
             for i in range(OrderQty):
                 self.OpenInterest.append([-1,Product,OrderTime,OrderPrice])
                 self.OpenInterestQty -=1
-    # 出場紀錄(買賣別需與進場相反，多單進場則空單出場)
-    def Cover(self, BS,Product,CoverTime,CoverPrice,CoverQty):
-        if BS=='S' or BS=='Sell':
-            for i in range(CoverQty):
-                # 取得多單未平倉部位
-                TmpInterest=[ i for i in self.OpenInterest if i[0]==1 ][0]
-                if TmpInterest != []:
-                    # 清除未平倉紀錄
-                    self.OpenInterest.remove(TmpInterest)
-                    self.OpenInterestQty -=1
-                    # 新增交易紀錄
-                    self.TradeRecord.append(['B',TmpInterest[1],TmpInterest[2],TmpInterest[3],CoverTime,CoverPrice])
-                    self.Profit.append(CoverPrice-TmpInterest[3])
-                    self.Profit_rate.append((CoverPrice-TmpInterest[3])/TmpInterest[3])
-                else:
-                    print('尚無進場')
-        elif BS=='B' or BS=='Buy':
-            for i in range(CoverQty):
-                # 取得空單未平倉部位
-                TmpInterest=[ i for i in self.OpenInterest if i[0]==-1 ][0]
-                if TmpInterest != []:
-                    # 清除未平倉紀錄
-                    self.OpenInterest.remove(TmpInterest)
-                    self.OpenInterestQty +=1
-                    # 新增交易紀錄
-                    self.TradeRecord.append(['S',TmpInterest[1],TmpInterest[2],TmpInterest[3],CoverTime,CoverPrice])
-                    self.Profit.append(TmpInterest[3]-CoverPrice)
-                    self.Profit_rate.append((TmpInterest[3]-CoverPrice)/TmpInterest[3])
-                else:
-                    print('尚無進場')
+    class Record():
+        def __init__(self, spread=0.0, tax=0.0, commission=0.0, isFuture=False):
+            # 儲存績效
+            self.Profit = []
+            self.Profit_rate = []
+            # 未平倉
+            self.OpenInterestQty = 0
+            self.OpenInterest = []
+            # 交易紀錄總計
+            self.TradeRecord = []
+            
+            # 新增交易成本參數
+            self.spread = spread      # 點差
+            self.tax = tax            # 稅
+            self.commission = commission  # 手續費
+            self.isFuture = isFuture   # 是否為期貨商品
+            
+            # 進場紀錄
+        def Order(self, BS, Product, OrderTime, OrderPrice, OrderQty):
+            if BS == 'B' or BS == 'Buy':
+                for i in range(OrderQty):
+                    self.OpenInterest.append([1, Product, OrderTime, OrderPrice])
+                    self.OpenInterestQty += 1
+            elif BS == 'S' or BS == 'Sell':
+                for i in range(OrderQty):
+                    self.OpenInterest.append([-1, Product, OrderTime, OrderPrice])
+                    self.OpenInterestQty -= 1
+                
+                # 出場紀錄(買賣別需與進場相反，多單進場則空單出場)
+        def Cover(self, BS, Product, CoverTime, CoverPrice, CoverQty):
+            if BS == 'S' or BS == 'Sell':
+                for i in range(CoverQty):
+                    # 取得多單未平倉部位
+                    TmpInterest = [i for i in self.OpenInterest if i[0] == 1][0]
+                    if TmpInterest != []:
+                        # 清除未平倉紀錄
+                       self.OpenInterest.remove(TmpInterest)
+                       self.OpenInterestQty -= 1
+                       # 計算損益
+                       profit = CoverPrice - TmpInterest[3]
+                       # 新增交易紀錄
+                       self.TradeRecord.append([
+                            'B', TmpInterest[1], TmpInterest[2], TmpInterest[3],
+                            CoverTime, CoverPrice, profit
+                        ])
+                       self.Profit.append(profit)
+                       self.Profit_rate.append(profit / TmpInterest[3])
+                    else:
+                        print('尚無進場')
+            elif BS == 'B' or BS == 'Buy':
+                for i in range(CoverQty):
+                    # 取得空單未平倉部位
+                    TmpInterest = [i for i in self.OpenInterest if i[0] == -1][0]
+                    if TmpInterest != []:
+                        # 清除未平倉紀錄
+                        self.OpenInterest.remove(TmpInterest)
+                        self.OpenInterestQty += 1
+                        # 計算損益
+                        profit = TmpInterest[3] - CoverPrice
+                        self.TradeRecord.append([
+                            'S', TmpInterest[1], TmpInterest[2], TmpInterest[3],
+                            CoverTime, CoverPrice, profit
+                            ])
+                        self.Profit.append(profit)
+                        self.Profit_rate.append(profit / TmpInterest[3])
+                    else:
+                        print('尚無進場')
+                    
     # 取得當前未平倉量
-    def GetOpenInterest(self):               
-        # 取得未平倉量
+    def GetOpenInterest(self):
         return self.OpenInterestQty
+        
     # 取得交易紀錄
-    def GetTradeRecord(self):               
-        # 取得未平倉量
-        return self.TradeRecord   
+    def GetTradeRecord(self):
+        return self.TradeRecord
     # 取得交易盈虧清單
     def GetProfit(self):       
         return self.Profit 
