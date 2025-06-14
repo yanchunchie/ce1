@@ -64,24 +64,25 @@ class Record():
                     self.OpenInterestQty -= 1
                 
                 # 出場紀錄(買賣別需與進場相反，多單進場則空單出場)
+    # 出場紀錄 - 修正方法名稱 Cover -> Cover
         def Cover(self, BS, Product, CoverTime, CoverPrice, CoverQty):
             if BS == 'S' or BS == 'Sell':
                 for i in range(CoverQty):
                     # 取得多單未平倉部位
                     TmpInterest = [i for i in self.OpenInterest if i[0] == 1][0]
                     if TmpInterest != []:
-                        # 清除未平倉紀錄
-                       self.OpenInterest.remove(TmpInterest)
-                       self.OpenInterestQty -= 1
-                       # 計算損益
-                       profit = CoverPrice - TmpInterest[3]
-                       # 新增交易紀錄
-                       self.TradeRecord.append([
+                    # 清除未平倉紀錄
+                        self.OpenInterest.remove(TmpInterest)
+                        self.OpenInterestQty -= 1
+                    # 計算損益
+                        profit = CoverPrice - TmpInterest[3]
+                    # 新增交易紀錄
+                        self.TradeRecord.append([
                             'B', TmpInterest[1], TmpInterest[2], TmpInterest[3],
                             CoverTime, CoverPrice, profit
-                        ])
-                       self.Profit.append(profit)
-                       self.Profit_rate.append(profit / TmpInterest[3])
+                            ])
+                        self.Profit.append(profit)
+                        self.Profit_rate.append(profit / TmpInterest[3])
                     else:
                         print('尚無進場')
             elif BS == 'B' or BS == 'Buy':
@@ -92,7 +93,7 @@ class Record():
                         # 清除未平倉紀錄
                         self.OpenInterest.remove(TmpInterest)
                         self.OpenInterestQty += 1
-                        # 計算損益
+                    # 計算損益
                         profit = TmpInterest[3] - CoverPrice
                         self.TradeRecord.append([
                             'S', TmpInterest[1], TmpInterest[2], TmpInterest[3],
