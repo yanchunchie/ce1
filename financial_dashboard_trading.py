@@ -3001,7 +3001,8 @@ if st.button('開始回測'):
     trade_records = OrderRecord.GetTradeRecord()
     if trade_records:
         trade_df = pd.DataFrame(trade_records, 
-                               columns=['方向', '商品', '進場時間', '進場價格', '數量', '出場時間', '出場價格', '損益'])
+                                columns=['方向', '商品', '進場時間', '進場價格', 
+                                         '出場時間', '出場價格', '損益'])
         st.dataframe(trade_df)
     else:
         st.warning("沒有交易紀錄")
