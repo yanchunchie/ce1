@@ -994,9 +994,9 @@ if st.button('開始回測'):
             break
     
     if is_future:  # 期貨商品
-        OrderRecord = Record(G_spread=3.628e-4, G_tax=0.00002, G_commission=0.0002, isFuture=True)
+        OrderRecord = Record(spread=3.628e-4, tax=0.00002, commission=0.0002, isFuture=True)
     else:  # 股票商品
-        OrderRecord = Record(G_spread=3.628e-4, G_tax=0.003, G_commission=0.001425, isFuture=False)
+        OrderRecord = Record(spread=3.628e-4, tax=0.003, commission=0.001425, isFuture=False)
         
     # 根據選擇的策略執行回測
     if choice_strategy == '移動平均線策略':
@@ -2134,17 +2134,15 @@ def calculate_performance(choice, OrderRecord):
             最大連續虧損, 最大盈虧回落_MDD, 報酬風險比)
 
   ###### 計算績效
-if len(OrderRecord.Profit) > 0:
+# 確保 OrderRecord 已初始化
+if 'OrderRecord' in locals() and len(OrderRecord.Profit) > 0:
     # 使用統一的績效計算函數
     results = calculate_performance(choice, OrderRecord)
     (交易總盈虧, 平均每次盈虧, 平均投資報酬率, 
      平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 
      最大連續虧損, 最大盈虧回落_MDD, 報酬風險比) = results
-else:
-    st.write('沒有交易記錄(已經了結之交易)!')
-
-# 顯示績效
-if len(OrderRecord.Profit) > 0:
+    
+    # 顯示績效
     data = {
         "項目": ["交易總盈虧(元)", "平均每次盈虧(元)", "平均投資報酬率", "平均獲利(只看獲利的)(元)", "平均虧損(只看虧損的)(元)", "勝率", "最大連續虧損(元)", "最大盈虧回落(MDD)(元)", "報酬風險比(交易總盈虧/最大盈虧回落(MDD))"],
         "數值": [交易總盈虧, 平均每次盈虧, 平均投資報酬率, 平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 最大連續虧損, 最大盈虧回落_MDD, 報酬風險比]
@@ -2152,7 +2150,7 @@ if len(OrderRecord.Profit) > 0:
     df = pd.DataFrame(data)
     st.write(df)
 else:
-    st.write('沒有交易記錄(已經了結之交易) !')
+    st.warning("沒有交易記錄(已經了結之交易) !")
 
 # 繪製累計盈虧圖
 if choice == choices[0]:
