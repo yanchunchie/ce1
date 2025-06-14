@@ -21,6 +21,15 @@ class KBar():
         self.cycle = datetime.timedelta(minutes = cycle)
     # 更新最新報價
     def AddPrice(self,time, open_price, close_price, low_price, high_price,volume):
+        if len(self.TAKBar['close']) == 0:
+            # 任何情況下第一次都先append，不管是同一根還是新K棒
+            self.TAKBar['time'] = np.append(self.TAKBar['time'], self.current)
+            self.TAKBar['open'] = np.append(self.TAKBar['open'], open_price)
+            self.TAKBar['high'] = np.append(self.TAKBar['high'], high_price)
+            self.TAKBar['low'] = np.append(self.TAKBar['low'], low_price)
+            self.TAKBar['close'] = np.append(self.TAKBar['close'], close_price)
+            self.TAKBar['volume'] = np.append(self.TAKBar['volume'], volume)
+            return 1
         # 同一根K棒
         if time <= self.current:
             # 更新收盤價
