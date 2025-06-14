@@ -197,31 +197,7 @@ KBar_dic = Change_Cycle(Date,cycle_duration,KBar_dic,product_name)   ## 設定cy
 
 ###### 將K線 Dictionary 轉換成 Dataframe
 KBar_df = pd.DataFrame(KBar_dic)
-with st.expander("MA 交叉策略參數設定"):
-    MoveStopLoss   = st.slider('停損量',        0, 100, 30)
-    LongMAPeriod   = st.slider('長 MA 週期',    1, 100, 10)
-    ShortMAPeriod  = st.slider('短 MA 週期',    1, 100,  2)
-    Order_Quantity = st.slider('下單數量',      1, 100,  1)
-# (a) 存下畫指標用的原始 KBar_df
-KBar_dfs[label]    = KBar_df
-# (b) 執行 MA 回測並存 RecordObj
-RecordObj          = Record()
-RecordObj          = back_test_ma_strategy(
-                         RecordObj,
-                         KBar_df,
-                         MoveStopLoss, LongMAPeriod,
-                         ShortMAPeriod, Order_Quantity
-                     )
-record_objs[label] = RecordObj
 
-# 放在最前面或 Section (6) 之前
-def back_test_ma_strategy(record_obj, KBar_df,
-                          MoveStopLoss, LongMAPeriod, ShortMAPeriod, Order_Quantity):
-    # …你的 MA 交叉回測邏輯…
-    return record_obj
-
-def ChartOrder_MA(Kbar_df, TR):
-    # …你的下單點位繪圖邏輯…
 
 #%%
 ####### (4) 計算各種技術指標 #######
@@ -827,86 +803,6 @@ st.subheader("程式交易:")
 #%%
 ###### 函數定義: 繪製K線圖加上MA以及下單點位
 # @st.cache_data(ttl=3600, show_spinner="正在加載資料...")  ## Add the caching decorator
-# 取得當前所選商品的 KBar_df
-# 因為是單一商品，所以直接拿 KBar_df
-df_trade = KBar_df
-rec2     = Record()
-rec2     = back_test_ma_strategy(
-             rec2,
-             df_trade,
-             MoveStopLoss,
-             LongMAPeriod,
-             ShortMAPeriod,
-             Order_Quantity
-          )
-ChartOrder_MA(df_trade, rec2.GetTradeRecord())
-
-
-#%%
-###### 選擇不同交易策略:
-choices_strategies = ['<進場>: 移動平均線黃金交叉作多,死亡交叉作空. <出場>: 結算平倉(期貨), 移動停損.']
-choice_strategy = st.selectbox('選擇交易策略', choices_strategies, index=0)
-
-
-#%%
-###### 各別不同策略參數設定 & 回測
-#if choice_strategy == '<進場>: 移動平均線黃金交叉作多,死亡交叉作空. <出場>: 結算平倉(期貨), 移動停損.':
-#%% 回測函式定義：MA 黃金／死亡交叉策略
-def back_test_ma_strategy(record_obj, KBar_df,
-                          MoveStopLoss, LongMAPeriod, ShortMAPeriod, Order_Quantity):
-    # 1) 計算長短 MA
-    KBar_df['MA_long']  = Calculate_MA(KBar_df, period=LongMAPeriod)
-    KBar_df['MA_short'] = Calculate_MA(KBar_df, period=ShortMAPeriod)
-    # 找最後一筆有效 MA 的索引
-    last_nan = KBar_df['MA_long'][::-1].index[KBar_df['MA_long'][::-1].apply(pd.isna)][0]
-
-    # 2) 主回測迴圈
-    for n in range(last_nan+1, len(KBar_df['time'])-1):
-        t_next = KBar_df['time'][n+1]
-        p_next = KBar_df['product'][n+1]
-        o_next = KBar_df['open'][n+1]
-        c_curr = KBar_df['close'][n]
-        ml_prev = KBar_df['MA_long'][n-1]; ms_prev = KBar_df['MA_short'][n-1]
-        ml_curr = KBar_df['MA_long'][n];   ms_curr = KBar_df['MA_short'][n]
-
-        # 無持倉 → 黃金／死亡交叉進場
-        if record_obj.GetOpenInterest()==0:
-            if ms_prev<=ml_prev and ms_curr>ml_curr:
-                record_obj.Order('Buy',  p_next, t_next, o_next, Order_Quantity)
-                StopLossPoint = o_next - MoveStopLoss
-                continue
-            if ms_prev>=ml_prev and ms_curr<ml_curr:
-                record_obj.Order('Sell', p_next, t_next, o_next, Order_Quantity)
-                StopLossPoint = o_next + MoveStopLoss
-                continue
-
-        oi = record_obj.GetOpenInterest()
-        # 多單持倉 → 期貨換約平倉／移動停損／觸及停損出場
-        if oi>0:
-            if p_next!=KBar_df['product'][n]:
-                record_obj.Cover('Sell', KBar_df['product'][n], KBar_df['time'][n],
-                                 KBar_df['close'][n], oi)
-                continue
-            if c_curr - MoveStopLoss > StopLossPoint:
-                StopLossPoint = c_curr - MoveStopLoss
-            elif c_curr < StopLossPoint:
-                record_obj.Cover('Sell', p_next, t_next, o_next, oi)
-            continue
-
-        # 空單持倉 → 同理
-        if oi<0:
-            if p_next!=KBar_df['product'][n]:
-                record_obj.Cover('Buy', KBar_df['product'][n], KBar_df['time'][n],
-                                 KBar_df['close'][n], -oi)
-                continue
-            if c_curr + MoveStopLoss < StopLossPoint:
-                StopLossPoint = c_curr + MoveStopLoss
-            elif c_curr > StopLossPoint:
-                record_obj.Cover('Buy', p_next, t_next, o_next, -oi)
-            continue
-
-    return record_obj
-
 def ChartOrder_MA(Kbar_df,TR):
     # # 將K線轉為DataFrame
     # Kbar_df=KbarToDf(KBar)
@@ -989,6 +885,89 @@ def ChartOrder_MA(Kbar_df,TR):
  
     fig5.layout.yaxis2.showgrid=True
     st.plotly_chart(fig5, use_container_width=True)
+
+
+#%%
+###### 選擇不同交易策略:
+choices_strategies = ['<進場>: 移動平均線黃金交叉作多,死亡交叉作空. <出場>: 結算平倉(期貨), 移動停損.']
+choice_strategy = st.selectbox('選擇交易策略', choices_strategies, index=0)
+
+
+#%%
+###### 各別不同策略參數設定 & 回測
+#if choice_strategy == '<進場>: 移動平均線黃金交叉作多,死亡交叉作空. <出場>: 結算平倉(期貨), 移動停損.':
+if choice_strategy == choices_strategies[0]:
+    ##### 選擇參數
+    with st.expander("<策略參數設定>: 交易停損量、長移動平均線(MA)的K棒週期數目、短移動平均線(MA)的K棒週期數目、購買數量"):
+        MoveStopLoss = st.slider('選擇程式交易停損量(股票:每股價格; 期貨(大小台指):台股指數點數. 例如: 股票進場做多時, 取30代表停損價格為目前每股價格減30元; 大小台指進場做多時, 取30代表停損指數為目前台股指數減30點)', 0, 100, 30, key='MoveStopLoss')
+        LongMAPeriod_trading=st.slider('設定計算長移動平均線(MA)的 K棒週期數目(整數, 例如 10)', 0, 100, 10, key='trading_MA_long')
+        ShortMAPeriod_trading=st.slider('設定計算短移動平均線(MA)的 K棒週期數目(整數, 例如 2)', 0, 100, 2, key='trading_MA_short')
+        Order_Quantity = st.slider('選擇購買數量(股票單位為張數(一張為1000股); 期貨單位為口數)', 1, 100, 1, key='Order_Quantity')
+    
+        #### 計算長短移動平均線
+        KBar_df['MA_long'] = Calculate_MA(KBar_df, period=LongMAPeriod_trading)
+        KBar_df['MA_short'] = Calculate_MA(KBar_df, period=ShortMAPeriod_trading)
+        
+        #### 尋找最後 NAN值的位置
+        last_nan_index_MA_trading = KBar_df['MA_long'][::-1].index[KBar_df['MA_long'][::-1].apply(pd.isna)][0]
+
+
+        
+        #### 建立部位管理物件
+        OrderRecord=Record() 
+        
+        # ###### 變為字典
+        # # KBar_dic = KBar_df_original.to_dict('list')
+        # KBar_dic = KBar_df.to_dict('list')
+        
+    ##### 開始回測
+    for n in range(1,len(KBar_df['time'])-1):
+        # 先判斷long MA的上一筆值是否為空值 再接續判斷策略內容
+        if not np.isnan( KBar_df['MA_long'][n-1] ) :
+            ## 進場: 如果無未平倉部位 
+            if OrderRecord.GetOpenInterest()==0 :
+                # 多單進場: 黃金交叉: short MA 向上突破 long MA
+                if KBar_df['MA_short'][n-1] <= KBar_df['MA_long'][n-1] and KBar_df['MA_short'][n] > KBar_df['MA_long'][n] :
+                    OrderRecord.Order('Buy', KBar_df['product'][n+1],KBar_df['time'][n+1],KBar_df['open'][n+1],Order_Quantity)
+                    OrderPrice = KBar_df['open'][n+1]
+                    StopLossPoint = OrderPrice - MoveStopLoss
+                    continue
+                # 空單進場:死亡交叉: short MA 向下突破 long MA
+                if KBar_df['MA_short'][n-1] >= KBar_df['MA_long'][n-1] and KBar_df['MA_short'][n] < KBar_df['MA_long'][n] :
+                    OrderRecord.Order('Sell', KBar_df['product'][n+1],KBar_df['time'][n+1],KBar_df['open'][n+1],Order_Quantity)
+                    OrderPrice = KBar_df['open'][n+1]
+                    StopLossPoint = OrderPrice + MoveStopLoss
+                    continue
+            # 多單出場: 如果有多單部位   
+            elif OrderRecord.GetOpenInterest()>0 :
+                ## 結算平倉(期貨才使用, 股票除非是下市櫃)
+                if KBar_df['product'][n+1] != KBar_df['product'][n] :
+                    OrderRecord.Cover('Sell', KBar_df['product'][n],KBar_df['time'][n],KBar_df['close'][n],OrderRecord.GetOpenInterest())
+                    continue
+                # 逐筆更新移動停損價位
+                if KBar_df['close'][n] - MoveStopLoss > StopLossPoint :
+                    StopLossPoint = KBar_df['close'][n] - MoveStopLoss
+                # 如果上一根K的收盤價觸及停損價位，則在最新時間出場
+                elif KBar_df['close'][n] < StopLossPoint :
+                    OrderRecord.Cover('Sell', KBar_df['product'][n+1],KBar_df['time'][n+1],KBar_df['open'][n+1],OrderRecord.GetOpenInterest())
+                    continue
+            # 空單出場: 如果有空單部位
+            elif OrderRecord.GetOpenInterest()<0 :
+                ## 結算平倉(期貨才使用, 股票除非是下市櫃)
+                if KBar_df['product'][n+1] != KBar_df['product'][n] :
+               
+                    OrderRecord.Cover('Buy', KBar_df['product'][n],KBar_df['time'][n],KBar_df['close'][n],-OrderRecord.GetOpenInterest())
+                    continue
+                # 逐筆更新移動停損價位
+                if KBar_df['close'][n] + MoveStopLoss < StopLossPoint :
+                    StopLossPoint = KBar_df['close'][n] + MoveStopLoss
+                # 如果上一根K的收盤價觸及停損價位，則在最新時間出場
+                elif KBar_df['close'][n] > StopLossPoint :
+                    OrderRecord.Cover('Buy', KBar_df['product'][n+1],KBar_df['time'][n+1],KBar_df['open'][n+1],-OrderRecord.GetOpenInterest())
+                    continue
+
+    ##### 繪製K線圖加上MA以及下單點位    
+    ChartOrder_MA(KBar_df,OrderRecord.GetTradeRecord())
 
 ##### 繪製K線圖加上MA以及下單點位
 # @st.cache_data(ttl=3600, show_spinner="正在加載資料...")  ## Add the caching decorator
@@ -1081,122 +1060,131 @@ def ChartOrder_MA(Kbar_df,TR):
 # OrderRecord.GetTradeRecord()          ## 交易紀錄清單
 # OrderRecord.GetProfit()               ## 利潤清單
 
+#%%
+##### 定義計算績效函數:
+def 計算績效_股票():
+    交易總盈虧 = OrderRecord.GetTotalProfit()*1000          ## 取得交易總盈虧
+    平均每次盈虧 = OrderRecord.GetAverageProfit()*1000         ## 取得交易 "平均" 盈虧(每次)
+    平均投資報酬率 = OrderRecord.GetAverageProfitRate()    ## 取得交易 "平均" 投資報酬率(每次)  
+    平均獲利_只看獲利的 = OrderRecord.GetAverEarn()*1000              ## 平均獲利(只看獲利的) 
+    平均虧損_只看虧損的 = OrderRecord.GetAverLoss()*1000              ## 平均虧損(只看虧損的)
+    勝率 = OrderRecord.GetWinRate()              ## 勝率
+    最大連續虧損 = OrderRecord.GetAccLoss()*1000               ## 最大連續虧損
+    最大盈虧回落_MDD = OrderRecord.GetMDD()*1000                   ## 最大利潤(盈虧)回落(MDD). 這個不是一般的 "資金" 或 "投資報酬率" 的回落
+    if 最大盈虧回落_MDD>0:
+        報酬風險比 = 交易總盈虧/最大盈虧回落_MDD
+    else:
+        報酬風險比='資料不足無法計算'
+    return 交易總盈虧,平均每次盈虧,平均投資報酬率,平均獲利_只看獲利的,平均虧損_只看虧損的,勝率,最大連續虧損,最大盈虧回落_MDD,報酬風險比
+
+
+def 計算績效_大台指期貨():
+    交易總盈虧 = OrderRecord.GetTotalProfit()*200          ## 取得交易總盈虧
+    平均每次盈虧 = OrderRecord.GetAverageProfit()*200         ## 取得交易 "平均" 盈虧(每次)
+    平均投資報酬率 = OrderRecord.GetAverageProfitRate()    ## 取得交易 "平均" 投資報酬率(每次)  
+    平均獲利_只看獲利的 = OrderRecord.GetAverEarn()*200              ## 平均獲利(只看獲利的) 
+    平均虧損_只看虧損的 = OrderRecord.GetAverLoss()*200              ## 平均虧損(只看虧損的)
+    勝率 = OrderRecord.GetWinRate()              ## 勝率
+    最大連續虧損 = OrderRecord.GetAccLoss()*200               ## 最大連續虧損
+    最大盈虧回落_MDD = OrderRecord.GetMDD()*200                   ## 最大利潤(盈虧)回落(MDD). 這個不是一般的 "資金" 或 "投資報酬率" 的回落
+    if 最大盈虧回落_MDD>0:
+        報酬風險比 = 交易總盈虧/最大盈虧回落_MDD
+    else:
+        報酬風險比='資料不足無法計算'
+    return 交易總盈虧,平均每次盈虧,平均投資報酬率,平均獲利_只看獲利的,平均虧損_只看虧損的,勝率,最大連續虧損,最大盈虧回落_MDD,報酬風險比
+
+
+def 計算績效_小台指期貨():
+    交易總盈虧 = OrderRecord.GetTotalProfit()*50          ## 取得交易總盈虧
+    平均每次盈虧 = OrderRecord.GetAverageProfit()*50         ## 取得交易 "平均" 盈虧(每次)
+    平均投資報酬率 = OrderRecord.GetAverageProfitRate()    ## 取得交易 "平均" 投資報酬率(每次)  
+    平均獲利_只看獲利的 = OrderRecord.GetAverEarn()*50              ## 平均獲利(只看獲利的) 
+    平均虧損_只看虧損的 = OrderRecord.GetAverLoss()*50              ## 平均虧損(只看虧損的)
+    勝率 = OrderRecord.GetWinRate()              ## 勝率
+    最大連續虧損 = OrderRecord.GetAccLoss()*50               ## 最大連續虧損
+    最大盈虧回落_MDD = OrderRecord.GetMDD()*50                   ## 最大利潤(盈虧)回落(MDD). 這個不是一般的 "資金" 或 "投資報酬率" 的回落
+    if 最大盈虧回落_MDD>0:
+        報酬風險比 = 交易總盈虧/最大盈虧回落_MDD
+    else:
+        報酬風險比='資料不足無法計算'
+    return 交易總盈虧,平均每次盈虧,平均投資報酬率,平均獲利_只看獲利的,平均虧損_只看虧損的,勝率,最大連續虧損,最大盈虧回落_MDD,報酬風險比
+
+
+
+
+
+##### 定義各類商品的合約乘數
+contract_multipliers = {
+    # 股票類 (單位：元/張，1張=1000股)
+    '台積電 2330: 2020.01.02 至 2025.04.16': 1000,
+    '英業達 2356: 2020.01.02 至 2024.04.12': 1000,
+    '堤維西 1522: 2020.01.02 至 2024.04.12': 1000,
+    '0050 台灣50ETF: 2020.01.02 至 2025.03.10': 1000,
+    '00631L 台灣50正2: 2023.04.17 至 2025.04.17': 1000,
+    '華碩 2357: 2023.04.17 至 2025.04.16': 1000,
+    
+    # 期貨類 (單位：元/點)
+    '大台指期貨2024.12到期: 2023.12 至 2024.4.11': 200,    # 大台指
+    '小台指期貨2024.12到期: 2023.12 至 2024.4.11': 50,     # 小台指
+    '金融期貨 CBF: 2023.04.17 至 2025.04.17': 1000,        # 金融期
+    '電子期貨 CCF: 2023.04.17 至 2025.04.16': 4000,        # 電子期
+    '小型電子期貨 CDF: 2020.03.02 至 2025.04.14': 1000,    # 小型電子期
+    '非金電期貨 CEF: 2023.04.17 至 2025.04.16': 4000,      # 非金電期
+    '摩台期貨 CMF: 2023.04.17 至 2025.04.17': 100,        # 摩台期(美元計價)
+    '小型金融期貨 CQF: 2023.04.17 至 2025.04.17': 250,     # 小型金融期
+    '美元指數期貨 FXF: 2020.03.02 至 2025.04.14': 1000     # 美元指數期
+}
+
+##### 統一績效計算函數
+def calculate_performance(choice, OrderRecord):
+    # 獲取合約乘數
+    multiplier = contract_multipliers.get(choice, 1)
+    
+    # 摩台期需要匯率轉換 (假設1:30)
+    if "摩台期貨" in choice:
+        multiplier *= 30  # 美元轉台幣
+        
+    # 計算各項績效指標
+    交易總盈虧 = OrderRecord.GetTotalProfit() * multiplier
+    平均每次盈虧 = OrderRecord.GetAverageProfit() * multiplier
+    平均投資報酬率 = OrderRecord.GetAverageProfitRate()
+    平均獲利_只看獲利的 = OrderRecord.GetAverEarn() * multiplier
+    平均虧損_只看虧損的 = OrderRecord.GetAverLoss() * multiplier
+    勝率 = OrderRecord.GetWinRate()
+    最大連續虧損 = OrderRecord.GetAccLoss() * multiplier
+    最大盈虧回落_MDD = OrderRecord.GetMDD() * multiplier
+    
+    if 最大盈虧回落_MDD > 0:
+        報酬風險比 = 交易總盈虧 / 最大盈虧回落_MDD
+    else:
+        報酬風險比 = '資料不足無法計算'
+        
+    return (交易總盈虧, 平均每次盈虧, 平均投資報酬率, 
+            平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 
+            最大連續虧損, 最大盈虧回落_MDD, 報酬風險比)
+
+###### 計算績效
+if len(OrderRecord.Profit) > 0:
+    # 使用統一的績效計算函數
+    results = calculate_performance(choice, OrderRecord)
+    (交易總盈虧, 平均每次盈虧, 平均投資報酬率, 
+     平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 
+     最大連續虧損, 最大盈虧回落_MDD, 報酬風險比) = results
+else:
+    st.write('沒有交易記錄(已經了結之交易)!')
 
 #%%  
-##### （五）多商品回測績效表格化呈現  
-import pandas as pd  
-import numpy as np  
-import datetime  
-#── 放在 products_info 迴圈之前 ──
-with st.expander("MA 交叉策略參數設定"):
-    MoveStopLoss   = st.slider('停損量',        0, 100, 30)
-    LongMAPeriod   = st.slider('長 MA 週期',    1, 100, 10)
-    ShortMAPeriod  = st.slider('短 MA 週期',    1, 100,  2)
-    Order_Quantity = st.slider('下單數量',      1, 100,  1)
-
-# 1. 完整商品對應 pkl 路徑與預設日期  
-products_info = {
-    '台積電 2330: 2020.01.02 至 2025.04.16':
-        ('exported/kbars_1min_2330_2020-01-02_To_2025-04-16.pkl',
-         '台積電 2330', '2020-01-02', '2025-04-16'),
-    '大台指期貨2024.12到期: 2023.12 至 2024.4.11':
-        ('exported/kbars_TXF202412_2023-12-21-2024-04-11.pkl',
-         '大台指期貨', '2023-12-21', '2024-04-11'),
-    '小台指期貨2024.12到期: 2023.12 至 2024.4.11':
-        ('exported/kbars_MXF202412_2023-12-21-2024-04-11.pkl',
-         '小台指期貨', '2023-12-21', '2024-04-11'),
-    '英業達 2356: 2020.01.02 至 2024.04.12':
-        ('exported/kbars_2356_2020-01-01-2024-04-12.pkl',
-         '英業達 2356', '2020-01-02', '2024-04-12'),
-    '堤維西 1522: 2020.01.02 至 2024.04.12':
-        ('exported/kbars_1522_2020-01-01-2024-04-12.pkl',
-         '堤維西 1522', '2020-01-02', '2024-04-12'),
-    '0050 台灣50ETF: 2020.01.02 至 2025.03.10':
-        ('exported/kbars_1min_0050_2020-01-02_To_2025-03-10.pkl',
-         '台灣50ETF 0050', '2020-01-02', '2025-03-10'),
-    '00631L 台灣50正2: 2023.04.17 至 2025.04.17':
-        ('exported/kbars_1min_00631L_2023-04-17_To_2025-04-17.pkl',
-         '台灣50正2 00631L', '2023-04-17', '2025-04-17'),
-    '華碩 2357: 2023.04.17 至 2025.04.16':
-        ('exported/kbars_1min_2357_2023-04-17_To_2025-04-16.pkl',
-         '華碩 2357', '2023-04-17', '2025-04-16'),
-    '金融期貨 CBF: 2023.04.17 至 2025.04.17':
-        ('exported/kbars_1min_CBF_2023-04-17_To_2025-04-17.pkl',
-         '金融期貨 CBF', '2023-04-17', '2025-04-17'),
-    '電子期貨 CCF: 2023.04.17 至 2025.04.16':
-        ('exported/kbars_1min_CCF_2023-04-17_To_2025-04-16.pkl',
-         '電子期貨 CCF', '2023-04-17', '2025-04-16'),
-    '小型電子期貨 CDF: 2020.03.02 至 2025.04.14':
-        ('exported/kbars_1min_CDF_2020-03-02_To_2025-04-14.pkl',
-         '小型電子期貨 CDF', '2020-03-02', '2025-04-14'),
-    '非金電期貨 CEF: 2023.04.17 至 2025.04.16':
-        ('exported/kbars_1min_CEF_2023-04-17_To_2025-04-16.pkl',
-         '非金電期貨 CEF', '2023-04-17', '2025-04-16'),
-    '摩台期貨 CMF: 2023.04.17 至 2025.04.17':
-        ('exported/kbars_1min_CMF_2023-04-17_To_2025-04-17.pkl',
-         '摩台期貨 CMF', '2023-04-17', '2025-04-17'),
-    '小型金融期貨 CQF: 2023.04.17 至 2025.04.17':
-        ('exported/kbars_1min_CQF_2023-04-17_To_2025-04-17.pkl',
-         '小型金融期貨 CQF', '2023-04-17', '2025-04-17'),
-    '美元指數期貨 FXF: 2020.03.02 至 2025.04.14':
-        ('exported/kbars_1min_FXF_2020-03-02_To_2025-04-14.pkl',
-         '美元指數期貨 FXF', '2020-03-02', '2025-04-14'),
-}
-# 用來存每支商品跑完策略後的 RecordObj
-record_objs = {}
-# 存每支商品的 KBar_df 與回測物件
-KBar_dfs     = {}
-record_objs  = {}
-summary_rows = []
-for label, (pkl_path, product_name, ds, de) in products_info.items():
-    # … 前面已經 load_data、To_Dictionary_1、Change_Cycle → KBar_df …
-
-    # 乘數判斷
-    is_fut = '期貨' in product_name
-    m = 1000 if not is_fut else (200 if '大台指' in product_name else (50 if '小台指' in product_name else 1))
-
-    # ── 這裡改成無參數建構子 ──
-# 建立新 Record，呼叫 MA 策略函式
-    RecordObj = Record()
-# KBar_df 已在迴圈裡面用 pd.DataFrame(KBar_dic) 取好
-    RecordObj = back_test_ma_strategy(
-        RecordObj,
-        pd.DataFrame(KBar_dic),
-        MoveStopLoss,    # 由你在 Expander 或 sidebar 定義
-        LongMAPeriod,    # 與上面相同
-        ShortMAPeriod,   # 與上面相同
-        Order_Quantity   # 與上面相同
-    )
-
-
-    # 計算績效
-    tpnl   = RecordObj.GetTotalProfit()    * m
-    apnl   = RecordObj.GetAverageProfit()  * m
-    aroi   = RecordObj.GetAverageProfitRate()
-    awin   = RecordObj.GetAverEarn()       * m
-    aloss  = RecordObj.GetAverLoss()       * m
-    wrate  = RecordObj.GetWinRate()
-    closs  = RecordObj.GetAccLoss()        * m
-    mdd    = RecordObj.GetMDD()            * m
-    rr     = tpnl / mdd if mdd>0 else np.nan
-    # 把剛算完、含交易紀錄的 RecordObj 存起來
-    record_objs[label] = RecordObj
-    summary_rows.append({
-        '商品':                     label,
-        '交易總盈虧(元)':           tpnl,
-        '平均每次盈虧(元)':         apnl,
-        '平均投資報酬率':           aroi,
-        '平均獲利(只看獲利的)(元)':    awin,
-        '平均虧損(只看虧損的)(元)':    aloss,
-        '勝率':                     wrate,
-        '最大連續虧損(元)':         closs,
-        '最大盈虧回落(MDD)(元)':     mdd,
-        '報酬風險比':               rr
-    })
-# 全部跑完後一次顯示
-df_summary = pd.DataFrame(summary_rows)
-st.table(df_summary)
-
+##### 将投資績效存储成一个DataFrame並以表格形式呈現各項績效數據
+if len(OrderRecord.Profit)>0:
+    data = {
+        "項目": ["交易總盈虧(元)", "平均每次盈虧(元)", "平均投資報酬率", "平均獲利(只看獲利的)(元)", "平均虧損(只看虧損的)(元)", "勝率", "最大連續虧損(元)", "最大盈虧回落(MDD)(元)", "報酬風險比(交易總盈虧/最大盈虧回落(MDD))"],
+        "數值": [交易總盈虧, 平均每次盈虧, 平均投資報酬率, 平均獲利_只看獲利的, 平均虧損_只看虧損的, 勝率, 最大連續虧損, 最大盈虧回落_MDD, 報酬風險比]
+    }
+    df = pd.DataFrame(data)
+    if len(df)>0:
+        st.write(df)
+else:
+    st.write('沒有交易記錄(已經了結之交易) !')
 
 
 
@@ -1227,36 +1215,18 @@ st.table(df_summary)
 
 
 
-##### 畫累計盈虧圖 用多商品迴圈結果
-# 先從 record_objs 裡撈出對應的 RecordObj
-rec = record_objs.get(choice)
-if rec:
-    map_type = {
-        choices[0]: 'stock',
-        choices[1]: 'future1',
-        choices[2]: 'future2',
-        choices[3]: 'stock',
-        choices[4]: 'stock'
-    }
-    rec.GeneratorProfitChart(
-        choice=map_type[choice],
-        StrategyName='MA'
-    )
-    rec.GeneratorProfit_rateChart(StrategyName='MA')
-else:
-    st.error("請先執行回測，才能畫累計盈虧圖")
-
-
-df_trade = KBar_dfs.get(choice)
-if df_trade is not None:
-    rec2 = Record()
-    rec2 = back_test_ma_strategy(
-        rec2, df_trade,
-        MoveStopLoss, LongMAPeriod, ShortMAPeriod, Order_Quantity
-    )
-    ChartOrder_MA(df_trade, rec2.GetTradeRecord())
-else:
-    st.error("無法取得 KBar_df")
+#%%
+##### 畫累計盈虧圖:
+if choice == choices[0] :     ##'台積電: 2022.1.1 至 2024.4.9':
+    OrderRecord.GeneratorProfitChart(choice='stock',StrategyName='MA')
+if choice == choices[1] :                 ##'大台指期貨2024.12到期: 2023.12 至 2024.4.11':
+    OrderRecord.GeneratorProfitChart(choice='future1',StrategyName='MA')
+if choice == choices[2] :                            ##'小台指期貨2024.12到期: 2023.12 至 2024.4.11':
+    OrderRecord.GeneratorProfitChart(choice='future2',StrategyName='MA')
+if choice == choices[3] :                                        ##'英業達2020.1.2 至 2024.4.12':
+    OrderRecord.GeneratorProfitChart(choice='stock',StrategyName='MA')
+if choice == choices[4] :                                                    ##'堤維西2020.1.2 至 2024.4.12':
+    OrderRecord.GeneratorProfitChart(choice='stock',StrategyName='MA')
 
     
 
@@ -1312,7 +1282,7 @@ else:
 
 #%%
 ##### 畫累計投資報酬率圖:
-#OrderRecord.GeneratorProfit_rateChart(StrategyName='MA')
+OrderRecord.GeneratorProfit_rateChart(StrategyName='MA')
 # matplotlib.rcParams['font.family'] = 'Noto Sans CJK JP'
 # matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
